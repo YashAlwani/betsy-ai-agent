@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Betsy — Procurement Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --critical: #f85149;
+      --critical-bg: rgba(248,81,73,0.1);
+      --warning: #e3a008;
+      --warning-bg: rgba(227,160,8,0.1);
+      --ok: #3fb950;
+      --ok-bg: rgba(63,185,80,0.1);
+      --accent: #388bfd;
+      --accent-bg: rgba(56,139,253,0.1);
+      --teal: #39d3cc;
+      --sidebar-w: 220px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px; display: flex; height: 100vh; overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-w); background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 18px 14px; display: flex; flex-direction: column;
+      gap: 10px; overflow-y: auto; flex-shrink: 0;
+    }
+    .sidebar-heading {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted);
+    }
+    #scenario-badge {
+      font-size: 11px; padding: 3px 10px; border-radius: 10px;
+      background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border); display: inline-block; width: fit-content;
+    }
+    #scenario-badge.active { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+    select {
+      width: 100%; padding: 6px 8px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--surface2);
+      color: var(--text); font-size: 12px; cursor: pointer;
+    }
+    .btn {
+      width: 100%; padding: 7px 10px; border-radius: 6px;
+      border: 1px solid var(--accent); background: var(--accent);
+      color: #fff; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn.secondary {
+      background: var(--surface2); border-color: var(--border); color: var(--text); font-weight: 400;
+    }
+    #sidebar-msg { font-size: 11px; color: var(--ok); min-height: 16px; word-break: break-word; }
+    #sidebar hr { border: none; border-top: 1px solid var(--border); }
+    .refresh-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    .refresh-row input { width: auto; cursor: pointer; }
+    #last-refresh { font-size: 10px; color: var(--muted); }
+
+    /* ── Main ────────────────────────────────────────────── */
+    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    #header {
+      padding: 14px 20px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: flex-end;
+    }
+    #header h1 { font-size: 17px; font-weight: 700; }
+    #server-status { font-size: 11px; color: var(--muted); }
+
+    /* ── Metric cards ─────────────────────────────────────── */
+    .metrics {
+      display: flex; gap: 10px; padding: 12px 20px;
+      border-bottom: 1px solid var(--border); flex-wrap: wrap; flex-shrink: 0;
+    }
+    .metric {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 14px; min-width: 110px;
+    }
+    .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+    .metric-value { font-size: 22px; font-weight: 700; margin-top: 1px; }
+    .metric.critical .metric-value { color: var(--critical); }
+    .metric.warning .metric-value { color: var(--warning); }
+    .metric.ok .metric-value { color: var(--ok); }
+    .metric.accent .metric-value { color: var(--accent); }
+
+    /* ── Tabs ────────────────────────────────────────────── */
+    #tabs {
+      display: flex; gap: 0; padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0;
+    }
+    .tab-btn {
+      width: auto; background: none; border: none;
+      border-bottom: 2px solid transparent; border-radius: 0;
+      padding: 9px 14px; color: var(--muted); font-size: 12px;
+      font-weight: 500; cursor: pointer; transition: color .15s;
+    }
+    .tab-btn:hover { color: var(--text); opacity: 1; background: none; border-color: transparent; }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: none; opacity: 1; }
+
+    /* ── Tab content ─────────────────────────────────────── */
+    .tab-content { display: none; flex: 1; overflow-y: auto; padding: 16px 20px; flex-direction: column; gap: 14px; }
+    .tab-content.active { display: flex; }
+
+    /* ── Tables ──────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; flex-shrink: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: var(--surface2); padding: 7px 12px; text-align: left;
+      font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    td { padding: 7px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr.critical { background: var(--critical-bg); }
+    tr.critical td:first-child { border-left: 3px solid var(--critical); }
+    tr.warning { background: var(--warning-bg); }
+    tr.warning td:first-child { border-left: 3px solid var(--warning); }
+    tr.flagged { background: var(--critical-bg); }
+    tr.flagged td:first-child { border-left: 3px solid var(--critical); }
+
+    /* ── Badges ──────────────────────────────────────────── */
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 2px 7px;
+      border-radius: 10px; display: inline-block; white-space: nowrap;
+    }
+    .badge-critical { background: var(--critical-bg); color: var(--critical); border: 1px solid var(--critical); }
+    .badge-warning  { background: var(--warning-bg);  color: var(--warning);  border: 1px solid var(--warning); }
+    .badge-ok       { background: var(--ok-bg);       color: var(--ok);       border: 1px solid var(--ok); }
+    .badge-accent   { background: var(--accent-bg);   color: var(--accent);   border: 1px solid var(--accent); }
+    .badge-teal     { background: rgba(57,211,204,.12); color: var(--teal);   border: 1px solid var(--teal); }
+    .badge-gray     { background: var(--surface2);    color: var(--muted);    border: 1px solid var(--border); }
+
+    /* ── Charts ──────────────────────────────────────────── */
+    .chart-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px; position: relative; height: 270px;
+    }
+
+    /* ── Alerts ──────────────────────────────────────────── */
+    .alert { padding: 9px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+    .alert-critical { background: var(--critical-bg); border: 1px solid var(--critical); color: var(--critical); }
+    .alert-ok       { background: var(--ok-bg);       border: 1px solid var(--ok);       color: var(--ok); }
+
+    /* ── Agent log ───────────────────────────────────────── */
+    .log-entry {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 16px;
+      display: grid; grid-template-columns: 1fr 72px; gap: 10px; align-items: start;
+    }
+    .log-ts { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+    .log-trigger { font-weight: 600; font-size: 13px; }
+    .log-line { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .log-line span { color: var(--text); }
+    .conf-box { text-align: center; }
+    .conf-val { font-size: 20px; font-weight: 700; color: var(--ok); }
+    .conf-lbl { font-size: 10px; color: var(--muted); }
+
+    .empty-state { color: var(--muted); padding: 32px; text-align: center; font-size: 13px; }
+    .summary-line { font-size: 12px; color: var(--muted); padding: 2px 0; }
+    code { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+<aside id="sidebar">
+  <div class="sidebar-heading">Betsy</div>
+
+  <div class="sidebar-heading">Active Scenario</div>
+  <span id="scenario-badge">loading…</span>
+
+  <hr>
+
+  <div class="sidebar-heading">Inject Scenario</div>
+  <select id="scenario-select">
+    <option value="reset">— Reset to Normal —</option>
+    <option value="stockout_warning">Stockout Warning</option>
+    <option value="price_spike">Price Spike</option>
+    <option value="duplicate_invoice">Duplicate Invoice</option>
+    <option value="supplier_oos">Supplier OOS</option>
+  </select>
+  <button class="btn" onclick="injectScenario()">Inject</button>
+  <div id="sidebar-msg"></div>
+
+  <hr>
+
+  <div class="refresh-row">
+    <input type="checkbox" id="auto-refresh" checked>
+    <label for="auto-refresh">Auto-refresh (3s)</label>
+  </div>
+  <div id="last-refresh">Never</div>
+</aside>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────── -->
+<div id="main">
+
+  <div id="header">
+    <h1>Betsy — Procurement Intelligence</h1>
+    <div id="server-status">Connecting…</div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric" id="m-skus">      <div class="metric-label">Total SKUs</div>      <div class="metric-value">—</div></div>
+    <div class="metric" id="m-critical">  <div class="metric-label">Critical</div>         <div class="metric-value">—</div></div>
+    <div class="metric" id="m-warning">   <div class="metric-label">Warning</div>          <div class="metric-value">—</div></div>
+    <div class="metric" id="m-dupes">     <div class="metric-label">Dup. Invoices</div>   <div class="metric-value">—</div></div>
+    <div class="metric" id="m-pos">       <div class="metric-label">Pending POs</div>      <div class="metric-value">—</div></div>
+    <div class="metric" id="m-decisions"> <div class="metric-label">Agent Decisions</div> <div class="metric-value">—</div></div>
+  </div>
+
+  <div id="tabs">
+    <button class="tab-btn active" onclick="showTab('t-inventory', this)">Inventory Health</button>
+    <button class="tab-btn"        onclick="showTab('t-suppliers', this)">Supplier Scoreboard</button>
+    <button class="tab-btn"        onclick="showTab('t-orders', this)">Purchase Orders</button>
+    <button class="tab-btn"        onclick="showTab('t-invoices', this)">Invoice Reconciliation</button>
+    <button class="tab-btn"        onclick="showTab('t-log', this)">Agent Log</button>
+  </div>
+
+  <!-- Tab 1: Inventory -->
+  <div id="t-inventory" class="tab-content active">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>SKU</th><th>Name</th><th>Category</th>
+          <th>Stock</th><th>Reorder Pt</th><th>Days Left</th>
+          <th>Critical</th><th>Status</th>
+        </tr></thead>
+        <tbody id="inv-body"><tr><td colspan="8" class="empty-state">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="chart-wrap"><canvas id="inv-chart"></canvas></div>
+  </div>
+
+  <!-- Tab 2: Suppliers -->
+  <div id="t-suppliers" class="tab-content">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Name</th><th>Reliability</th><th>Avg Lead (days)</th>
+          <th>SKUs Supplied</th><th>Available</th><th>Payment Terms</th>
+        </tr></thead>
+        <tbody id="sup-body"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="chart-wrap"><canvas id="sup-chart"></canvas></div>
+  </div>
+
+  <!-- Tab 3: Purchase Orders -->
+  <div id="t-orders" class="tab-content">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>PO ID</th><th>Supplier</th><th>SKU</th><th>Qty</th>
+          <th>Total</th><th>Order Date</th><th>Exp. Delivery</th>
+          <th>Status</th><th>Requested By</th>
+        </tr></thead>
+        <tbody id="po-body"><tr><td colspan="9" class="empty-state">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div id="po-summary" class="summary-line"></div>
+  </div>
+
+  <!-- Tab 4: Invoices -->
+  <div id="t-invoices" class="tab-content">
+    <div id="dup-alert"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Invoice ID</th><th>Supplier</th><th>SKU</th><th>Qty</th>
+          <th>Unit Price</th><th>Total</th><th>Date</th>
+          <th>PO Ref</th><th>Status</th><th>Flag</th>
+        </tr></thead>
+        <tbody id="inv-rec-body"><tr><td colspan="10" class="empty-state">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 5: Agent Log -->
+  <div id="t-log" class="tab-content">
+    <div id="log-entries"></div>
+  </div>
+
+</div><!-- #main -->
+
+<script>
+  const charts = {};
+
+  Chart.defaults.color = '#8b949e';
+  Chart.defaults.borderColor = '#30363d';
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  async function api(path, method = 'GET') {
+    const r = await fetch(path, { method });
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }
+
+  const fmt = n => typeof n === 'number'
+    ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : (n ?? '—');
+
+  function statusOf(item) {
+    if (item.current_stock < item.reorder_point) return 'critical';
+    if (item.current_stock < item.reorder_point * 1.2) return 'warning';
+    return 'ok';
+  }
+
+  const daysLeft = item => (item.current_stock / item.daily_usage_avg).toFixed(1);
+
+  function poBadge(s) {
+    const map = {
+      pending_approval: ['warning', 'Pending Approval'],
+      approved:         ['accent',  'Approved'],
+      in_transit:       ['teal',    'In Transit'],
+      delivered:        ['gray',    'Delivered'],
+      cancelled:        ['critical','Cancelled'],
+    };
+    const [cls, label] = map[s] || ['gray', s];
+    return `<span class="badge badge-${cls}">${label}</span>`;
+  }
+
+  function setMetric(id, value, cls) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.querySelector('.metric-value').textContent = value;
+    el.className = 'metric' + (cls ? ' ' + cls : '');
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+  function showTab(id, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (btn) btn.classList.add('active');
+  }
+
+  // ── Scenario injection ─────────────────────────────────────────────────────
+  async function injectScenario() {
+    const name = document.getElementById('scenario-select').value;
+    const msg = document.getElementById('sidebar-msg');
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Injecting…';
+    try {
+      const result = await api(`/api/scenario/${name}`, 'POST');
+      msg.style.color = 'var(--ok)';
+      msg.textContent = result.description
+        ? result.description.slice(0, 80) + (result.description.length > 80 ? '…' : '')
+        : result.message || 'Done';
+      await refresh();
+    } catch (e) {
+      msg.style.color = 'var(--critical)';
+      msg.textContent = `Error: ${e.message}`;
+    }
+  }
+
+  // ── Render: Inventory ──────────────────────────────────────────────────────
+  function renderInventory(inventory) {
+    const critical = inventory.filter(i => statusOf(i) === 'critical');
+    const warning  = inventory.filter(i => statusOf(i) === 'warning');
+
+    setMetric('m-skus',     inventory.length, '');
+    setMetric('m-critical', critical.length,  critical.length > 0 ? 'critical' : 'ok');
+    setMetric('m-warning',  warning.length,   warning.length  > 0 ? 'warning'  : 'ok');
+
+    document.getElementById('inv-body').innerHTML = inventory.map(item => {
+      const cls  = statusOf(item);
+      const days = daysLeft(item);
+      return `<tr class="${cls}">
+        <td><code>${item.sku_id}</code></td>
+        <td>${item.name}</td>
+        <td>${item.category}</td>
+        <td>${item.current_stock.toLocaleString()}</td>
+        <td>${item.reorder_point.toLocaleString()}</td>
+        <td>${days}</td>
+        <td>${item.critical ? '<span class="badge badge-warning">Yes</span>' : 'No'}</td>
+        <td><span class="badge badge-${cls}">${cls.toUpperCase()}</span></td>
+      </tr>`;
+    }).join('');
+
+    const labels   = inventory.map(i => i.sku_id);
+    const stocks   = inventory.map(i => i.current_stock);
+    const reorders = inventory.map(i => i.reorder_point);
+    const colors   = inventory.map(i => {
+      const s = statusOf(i);
+      return s === 'critical' ? 'rgba(248,81,73,.8)' : s === 'warning' ? 'rgba(227,160,8,.8)' : 'rgba(63,185,80,.8)';
+    });
+
+    if (charts.inv) {
+      charts.inv.data.labels = labels;
+      charts.inv.data.datasets[0].data = stocks;
+      charts.inv.data.datasets[0].backgroundColor = colors;
+      charts.inv.data.datasets[1].data = reorders;
+      charts.inv.update('none');
+    } else {
+      charts.inv = new Chart(document.getElementById('inv-chart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Current Stock', data: stocks, backgroundColor: colors },
+            { label: 'Reorder Point', data: reorders,
+              backgroundColor: 'rgba(255,255,255,.1)', borderColor: 'rgba(255,255,255,.3)', borderWidth: 1 },
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'top' } },
+          scales: {
+            x: { grid: { color: '#21262d' } },
+            y: { grid: { color: '#21262d' } },
+          }
+        }
+      });
+    }
+  }
+
+  // ── Render: Suppliers ──────────────────────────────────────────────────────
+  function renderSuppliers(suppliers) {
+    document.getElementById('sup-body').innerHTML = suppliers.map(sup => {
+      const catalog  = sup.catalog || {};
+      const skuCount = Object.keys(catalog).length;
+      const avgLead  = skuCount
+        ? (Object.values(catalog).reduce((s, v) => s + v.lead_days, 0) / skuCount).toFixed(1)
+        : '—';
+      const reliCls  = sup.reliability_score >= 0.93 ? 'ok' : sup.reliability_score >= 0.85 ? 'warning' : 'critical';
+      const availBadge = sup.availability
+        ? '<span class="badge badge-ok">Available</span>'
+        : '<span class="badge badge-critical">Unavailable</span>';
+      return `<tr>
+        <td><strong>${sup.name}</strong></td>
+        <td><span class="badge badge-${reliCls}">${(sup.reliability_score * 100).toFixed(0)}%</span></td>
+        <td>${avgLead}</td>
+        <td>${skuCount}</td>
+        <td>${availBadge}</td>
+        <td>${sup.payment_terms}</td>
+      </tr>`;
+    }).join('');
+
+    const labels  = suppliers.map(s => s.name);
+    const data    = suppliers.map(s => s.reliability_score);
+    const colors  = suppliers.map(s => s.availability ? 'rgba(63,185,80,.8)' : 'rgba(248,81,73,.8)');
+
+    if (charts.sup) {
+      charts.sup.data.labels = labels;
+      charts.sup.data.datasets[0].data = data;
+      charts.sup.data.datasets[0].backgroundColor = colors;
+      charts.sup.update('none');
+    } else {
+      charts.sup = new Chart(document.getElementById('sup-chart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Reliability', data, backgroundColor: colors }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: '#21262d' } },
+            y: {
+              min: 0, max: 1,
+              ticks: { callback: v => Math.round(v * 100) + '%' },
+              grid: { color: '#21262d' }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  // ── Render: Orders ─────────────────────────────────────────────────────────
+  function renderOrders(orders) {
+    document.getElementById('po-body').innerHTML = orders.map(po => `<tr>
+      <td><code>${po.po_id}</code></td>
+      <td>${po.supplier_id}</td>
+      <td><code>${po.sku_id}</code></td>
+      <td>${po.quantity.toLocaleString()}</td>
+      <td>$${fmt(po.total_amount)}</td>
+      <td>${(po.order_date || '').slice(0, 10)}</td>
+      <td>${(po.expected_delivery || '').slice(0, 10)}</td>
+      <td>${poBadge(po.status)}</td>
+      <td>${po.requested_by || '—'}</td>
+    </tr>`).join('');
+
+    const pending   = orders.filter(o => o.status === 'pending_approval');
+    const totalSpend = orders.reduce((s, o) => s + o.total_amount, 0);
+    const pendingVal = pending.reduce((s, o) => s + o.total_amount, 0);
+    document.getElementById('po-summary').textContent =
+      `Total spend: $${fmt(totalSpend)}   |   Pending approval: $${fmt(pendingVal)} (${pending.length} PO${pending.length !== 1 ? 's' : ''})`;
+    setMetric('m-pos', pending.length, pending.length > 0 ? 'warning' : 'ok');
+  }
+
+  // ── Render: Invoices ───────────────────────────────────────────────────────
+  function renderInvoices(invoices, duplicates) {
+    const dupIds = new Set();
+    (duplicates || []).forEach(d => { dupIds.add(d.invoice_1); dupIds.add(d.invoice_2); });
+
+    const alertEl = document.getElementById('dup-alert');
+    if (duplicates && duplicates.length > 0) {
+      const atRisk = duplicates.reduce((s, d) => s + d.amount, 0);
+      alertEl.innerHTML = `<div class="alert alert-critical">
+        ${duplicates.length} duplicate invoice pair(s) detected — $${fmt(atRisk)} at risk. Review before payment.
+      </div>`;
+    } else {
+      alertEl.innerHTML = `<div class="alert alert-ok">No duplicate invoices detected.</div>`;
+    }
+
+    document.getElementById('inv-rec-body').innerHTML = invoices.map(inv => {
+      const dup = dupIds.has(inv.invoice_id);
+      return `<tr class="${dup ? 'flagged' : ''}">
+        <td><code>${inv.invoice_id}</code></td>
+        <td>${inv.supplier_id}</td>
+        <td><code>${inv.sku_id}</code></td>
+        <td>${inv.quantity}</td>
+        <td>$${fmt(inv.unit_price)}</td>
+        <td>$${fmt(inv.total_amount)}</td>
+        <td>${inv.date}</td>
+        <td>${inv.po_reference || '—'}</td>
+        <td>${inv.status}</td>
+        <td>${dup
+          ? '<span class="badge badge-critical">DUPLICATE</span>'
+          : '<span class="badge badge-ok">OK</span>'}</td>
+      </tr>`;
+    }).join('');
+
+    setMetric('m-dupes', (duplicates || []).length,
+      (duplicates || []).length > 0 ? 'critical' : 'ok');
+  }
+
+  // ── Render: Agent Log ──────────────────────────────────────────────────────
+  function renderAgentLog(log) {
+    setMetric('m-decisions', log.length, log.length > 0 ? 'accent' : '');
+    const el = document.getElementById('log-entries');
+    if (!log.length) {
+      el.innerHTML = '<div class="empty-state">No agent decisions yet — agent will log here when running (Week 2+).</div>';
+      return;
+    }
+    el.innerHTML = [...log].reverse().map(e => {
+      const ts   = (e.timestamp || '').slice(0, 19).replace('T', ' ');
+      const conf = typeof e.confidence === 'number' ? `${(e.confidence * 100).toFixed(0)}%` : '—';
+      return `<div class="log-entry">
+        <div>
+          <div class="log-ts">${ts}</div>
+          <div class="log-trigger">${e.trigger}</div>
+          <div class="log-line">Analysis: <span>${e.analysis}</span></div>
+          <div class="log-line">Decision: <span>${e.decision}</span></div>
+        </div>
+        <div class="conf-box">
+          <div class="conf-val">${conf}</div>
+          <div class="conf-lbl">Confidence</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Scenario badge ─────────────────────────────────────────────────────────
+  function renderScenario(info) {
+    const badge  = document.getElementById('scenario-badge');
+    const active = info.active || 'normal';
+    badge.textContent = active;
+    badge.className   = active !== 'normal' ? 'active' : '';
+  }
+
+  // ── Main refresh ───────────────────────────────────────────────────────────
+  async function refresh() {
+    try {
+      const [inventory, suppliers, orders, invoices, duplicates, agentLog, scenarioInfo] =
+        await Promise.all([
+          api('/api/inventory'),
+          api('/api/suppliers'),
+          api('/api/purchase-orders'),
+          api('/api/invoices'),
+          api('/api/invoices/duplicates'),
+          api('/api/agent-log'),
+          api('/api/scenario'),
+        ]);
+
+      renderInventory(inventory);
+      renderSuppliers(suppliers);
+      renderOrders(orders);
+      renderInvoices(invoices, duplicates);
+      renderAgentLog(agentLog);
+      renderScenario(scenarioInfo);
+
+      document.getElementById('server-status').textContent =
+        `localhost:8000  ·  updated ${new Date().toLocaleTimeString()}`;
+      document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+    } catch (e) {
+      document.getElementById('server-status').textContent =
+        `Cannot reach server — run: py -m uvicorn server.main:app --port 8000 (${e.message})`;
+    }
+  }
+
+  // ── Auto-refresh ───────────────────────────────────────────────────────────
+  let timer = setInterval(refresh, 3000);
+  document.getElementById('auto-refresh').addEventListener('change', function () {
+    clearInterval(timer);
+    if (this.checked) timer = setInterval(refresh, 3000);
+  });
+
+  refresh();
+</script>
+</body>
+</html>

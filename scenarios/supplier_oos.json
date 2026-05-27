@@ -1,0 +1,22 @@
+{
+  "scenario_name": "supplier_oos",
+  "description": "PrecisionParts GmbH (SUP-004, reliability 0.97) goes unavailable. SKU-003 is below reorder point — agent must failover to next best available supplier instead of the preferred high-reliability option.",
+  "overrides": {
+    "suppliers": [
+      {
+        "supplier_id": "SUP-004",
+        "availability": false
+      }
+    ],
+    "inventory": [
+      {
+        "sku_id": "SKU-003",
+        "current_stock": 120
+      }
+    ]
+  },
+  "expected_agent_action": "generate_po",
+  "expected_supplier": "FastParts Co",
+  "unavailable_supplier": "PrecisionParts GmbH",
+  "expected_reasoning_contains": ["supplier_unavailable", "failover", "alternative_supplier"]
+}

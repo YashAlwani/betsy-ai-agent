@@ -1,0 +1,23 @@
+{
+  "scenario_name": "duplicate_invoice",
+  "description": "A third invoice is submitted matching the same supplier, SKU, and amount as INV-2024-089 and INV-2024-091 already in the system. The invoices endpoint should detect all duplicates.",
+  "overrides": {
+    "invoices": [
+      {
+        "invoice_id": "INV-2024-099",
+        "supplier_id": "SUP-006",
+        "sku_id": "SKU-004",
+        "quantity": 10,
+        "unit_price": 147.00,
+        "total_amount": 1470.00,
+        "date": "2024-12-21",
+        "po_reference": "PO-20241001-C3D4",
+        "status": "received"
+      }
+    ]
+  },
+  "expected_agent_action": "flag_duplicate",
+  "duplicate_amount": 1470.00,
+  "duplicate_supplier": "SUP-006",
+  "expected_reasoning_contains": ["duplicate_detected", "same_amount", "same_supplier"]
+}

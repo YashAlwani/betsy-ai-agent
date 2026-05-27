@@ -1,0 +1,38 @@
+{
+  "scenario_name": "price_spike",
+  "description": "All suppliers raise SKU-003 Steel Rod prices 60-70% above historical average — best current quote ($13.60) is 50% above the 30-day historical avg (~$11.40). Agent should flag for human approval rather than auto-order.",
+  "overrides": {
+    "suppliers": [
+      {
+        "supplier_id": "SUP-001",
+        "catalog": {"SKU-003": {"unit_price": 20.00, "lead_days": 2}}
+      },
+      {
+        "supplier_id": "SUP-002",
+        "catalog": {"SKU-003": {"unit_price": 15.70, "lead_days": 7}}
+      },
+      {
+        "supplier_id": "SUP-003",
+        "catalog": {"SKU-003": {"unit_price": 24.00, "lead_days": 1}}
+      },
+      {
+        "supplier_id": "SUP-004",
+        "catalog": {"SKU-003": {"unit_price": 17.90, "lead_days": 5}}
+      },
+      {
+        "supplier_id": "SUP-005",
+        "catalog": {"SKU-003": {"unit_price": 13.60, "lead_days": 10}}
+      }
+    ],
+    "inventory": [
+      {
+        "sku_id": "SKU-003",
+        "current_stock": 150
+      }
+    ]
+  },
+  "expected_agent_action": "flag_for_approval",
+  "historical_avg_price_sku003": 11.40,
+  "spike_threshold_pct": 30,
+  "expected_reasoning_contains": ["price_spike", "above_historical", "human_approval"]
+}

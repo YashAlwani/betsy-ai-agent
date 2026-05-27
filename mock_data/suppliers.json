@@ -1,0 +1,81 @@
+[
+  {
+    "supplier_id": "SUP-001",
+    "name": "FastParts Co",
+    "reliability_score": 0.95,
+    "availability": true,
+    "payment_terms": "Net 30",
+    "catalog": {
+      "SKU-001": {"unit_price": 0.18, "lead_days": 2},
+      "SKU-003": {"unit_price": 12.50, "lead_days": 2},
+      "SKU-005": {"unit_price": 1.45, "lead_days": 2},
+      "SKU-010": {"unit_price": 0.10, "lead_days": 2}
+    }
+  },
+  {
+    "supplier_id": "SUP-002",
+    "name": "BulkSupply Ltd",
+    "reliability_score": 0.88,
+    "availability": true,
+    "payment_terms": "Net 45",
+    "catalog": {
+      "SKU-001": {"unit_price": 0.14, "lead_days": 7},
+      "SKU-002": {"unit_price": 23.00, "lead_days": 7},
+      "SKU-003": {"unit_price": 9.80, "lead_days": 7},
+      "SKU-006": {"unit_price": 3.20, "lead_days": 7},
+      "SKU-008": {"unit_price": 16.50, "lead_days": 7}
+    }
+  },
+  {
+    "supplier_id": "SUP-003",
+    "name": "QuickShip Express",
+    "reliability_score": 0.92,
+    "availability": true,
+    "payment_terms": "Net 15",
+    "catalog": {
+      "SKU-001": {"unit_price": 0.22, "lead_days": 1},
+      "SKU-003": {"unit_price": 15.00, "lead_days": 1},
+      "SKU-007": {"unit_price": 95.00, "lead_days": 1}
+    }
+  },
+  {
+    "supplier_id": "SUP-004",
+    "name": "PrecisionParts GmbH",
+    "reliability_score": 0.97,
+    "availability": true,
+    "payment_terms": "Net 60",
+    "catalog": {
+      "SKU-002": {"unit_price": 24.80, "lead_days": 5},
+      "SKU-003": {"unit_price": 11.20, "lead_days": 5},
+      "SKU-006": {"unit_price": 3.60, "lead_days": 5}
+    }
+  },
+  {
+    "supplier_id": "SUP-005",
+    "name": "ValueFirst Co",
+    "reliability_score": 0.72,
+    "availability": true,
+    "payment_terms": "Net 30",
+    "catalog": {
+      "SKU-001": {"unit_price": 0.12, "lead_days": 10},
+      "SKU-002": {"unit_price": 21.50, "lead_days": 10},
+      "SKU-003": {"unit_price": 8.50, "lead_days": 10},
+      "SKU-005": {"unit_price": 1.20, "lead_days": 10},
+      "SKU-008": {"unit_price": 15.80, "lead_days": 10},
+      "SKU-009": {"unit_price": 6.10, "lead_days": 10}
+    }
+  },
+  {
+    "supplier_id": "SUP-006",
+    "name": "MidRange Supply",
+    "reliability_score": 0.90,
+    "availability": true,
+    "payment_terms": "Net 30",
+    "catalog": {
+      "SKU-004": {"unit_price": 147.00, "lead_days": 3},
+      "SKU-007": {"unit_price": 89.00, "lead_days": 3},
+      "SKU-011": {"unit_price": 0.42, "lead_days": 3},
+      "SKU-012": {"unit_price": 122.00, "lead_days": 3}
+    }
+  }
+]
