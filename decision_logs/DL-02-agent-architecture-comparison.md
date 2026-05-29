@@ -1,0 +1,107 @@
+.# Decision Log Entry #2
+
+---
+
+## 0. Context
+
+**Project:** Betsy — Autonomous Procurement Agent / ICT Bachelor Research Project, Phase 1 → Phase 2
+
+**Why this matters right now:**
+DL-01 left a clear GAP — the environment exists but nothing connects inventory state → supplier selection → PO generation. This is the framework and architecture decision. Get it wrong here and the entire decision loop needs rebuilding later.
+
+**🔗 Where this fits:**
+Directly follows DL-01. Unlocks Phase 2 (Core Autonomous Loop). Everything else — memory, learning, edge case handling — sits on top of whatever pattern is chosen here.
+
+---
+
+## 1. My research question
+What autonomous agent framework and architecture pattern enables multi-step procurement decisions with conflict resolution and enforceable financial safeguards?
+
+---
+
+## 2. Current LO stage
+[x] Analyzing → [x] Advising → [x] Designing → [x] Realizing → [x] Managing
+
+---
+
+## 3. What makes a good decision here?
+
+- Framework supports both sequential and parallel execution — procurement has both use cases
+- Architecture handles conflicting findings — stockout on SKU-003 *and* a duplicate invoice from that same supplier, simultaneously
+- Financial safeguards enforced in code, not in a prompt that the LLM can reason its way around
+
+---
+
+## 4. What I decided
+LangGraph — two patterns. Pipeline (sequential, 6-node) for single-pass audit runs. Orchestra (parallel multi-agent) for when concurrent findings conflict with each other.
+
+---
+
+## 5. Why this decision
+
+**Method:** Library, Showroom, Lab
+
+Starting with the Library method — I compared LangGraph, AutoGen, CrewAI, and n8n against what Betsy actually needs. AutoGen and CrewAI both assume agents that *talk to each other* — a conversation loop where agents negotiate. That's the wrong model for procurement. A stockout isn't a conversation, it's a pipeline: detect → evaluate → decide → act. n8n is visual and rapid to prototype but hits a ceiling fast when decision logic gets conditional. LangGraph lets me define the graph explicitly, pass typed state between nodes, and branch based on what was found — sequential or parallel, my choice.
+
+The critical test came from the Showroom method — I built both patterns against the same 4 scenarios and compared outputs directly. Pipeline first, since it's simpler: `ingest → detect → evaluate → decide → act → audit`, typed state passed through each node (@pipeline/graph.py). The financial safeguard lives in the decide node:
+
+```python
+MAX_AUTO_USD = 5000
+```
+(@pipeline/nodes/decide.py:12) — anything over this routes to `pending_approval` regardless of what the LLM recommends. That's a business rule, not an AI judgment.
+
+Pipeline worked well until I ran the combined stockout + duplicate invoice scenario. Sequential processing handles them independently — the pipeline detected the stockout, evaluated suppliers, and queued a PO for SKU-003. Then it noticed the duplicate invoice from the same supplier. The PO was already queued. In a real deployment, that sequence would mean a payment goes out to a supplier under financial investigation. That's the failure mode that forced the Orchestra pattern.
+
+Orchestra runs three specialist agents in parallel — inventory_monitor, supplier_scout, invoice_auditor (@orchestra/agents/) — and feeds their findings to a central orchestrator that applies a conflict precedence table before anything executes (@orchestra/graph.py). Duplicate invoice always blocks PO generation. Price spike always requires human approval. Those rules are hardcoded, not prompted:
+
+```
+build_brief → parallel_analysis → orchestrate → execute → audit
+```
+(@orchestra/graph.py)
+
+Both patterns use the same LLM client (@shared/llm.py) and the same API layer (@shared/api_client.py) — they're interchangeable at the run level. The Lab comparison showed that Pipeline is faster to trace when debugging, Orchestra is safer when alerts compete.
+
+| | Pipeline | Orchestra |
+|---|---|---|
+| Pattern | Sequential, 1 thread | Parallel, 3 agents |
+| Conflict handling | None — first-wins | Explicit precedence table |
+| LLM calls | Per node | Per agent + orchestrator tiebreaker |
+| Best for | Simple single-issue audit | Competing simultaneous alerts |
+| Safeguard location | `decide.py` node | `orchestrate` node + per-agent |
+
+**What I'd recommend:**
+For a PM or client starting with procurement automation: begin with the Pipeline. It's readable, every decision is traceable to a specific node, and when something goes wrong you can pinpoint exactly where. Only move to Orchestra when you've confirmed the sequential system works and you're hitting scenarios where two things go wrong at the same time. That's also a good moment to involve the finance team — the `MAX_AUTO_USD` threshold isn't a technical setting, it's a business policy. I'd recommend agreeing on that number with finance *before* writing the first agent node, not after.
+
+---
+
+## 6. Does this hold up?
+
+- Supports sequential + parallel: ✅ — both patterns implemented and runnable
+- Handles conflicting findings: ✅ — Orchestra precedence table blocks PO when duplicate invoice is active (@orchestra/graph.py)
+- Safeguards in code not prompt: ✅ — `MAX_AUTO_USD = 5000` is a Python constant, not a sentence in a system prompt
+
+**Assumptions I'm making:**
+Ollama running locally is acceptable for demo scope. In a production deployment, you'd want a cloud-hosted model with SLA guarantees — Ollama has no uptime guarantee and the agent currently has no fallback if the model is unreachable.
+
+**What surprised me:**
+Pipeline came first. Orchestra wasn't planned — it emerged from a specific failure in the sequential run. That's a pattern worth noting: the architecture didn't come from upfront design, it came from finding a scenario the simpler approach couldn't handle. Both patterns sharing the same TypedDict state structure (@pipeline/state.py, @orchestra/state.py) made the comparison clean and kept the switch-over cheap.
+
+---
+
+## 7. What this unlocks
+
+**Next LO stage:** Realizing → Managing (Phase 3 — memory + learning)
+
+**What I can now do:**
+Run any of the 4 scenarios end-to-end through either architecture and get a logged, explainable procurement decision with a confidence score and a plain-English reasoning trail.
+
+**Ongoing monitoring:**
+Every run — Pipeline or Orchestra — ends with a decision logger that writes to `/api/agent-log`. Each entry has a trigger, decision, confidence score, and LLM-generated narrative. A PM reviewing Monday morning's autonomous decisions doesn't need to understand LangGraph — they open the log, read the narratives, and flag anything that looks off. That's the management layer. The confidence score is the signal: anything below 0.7 should probably have been escalated for human review anyway.
+
+**How I'll know this worked:**
+`python -m pipeline.run --scenario stockout_warning` produces a log entry with `trigger: stockout_risk`, `decision: generate_po`, `supplier: QuickShip Express`. Same scenario through Orchestra produces the same decision *plus* a conflict check confirming no duplicate invoice is blocking it. When both outputs match expected and the conflict resolution fires correctly — the architecture holds.
+
+---
+
+*@pipeline/graph.py · @pipeline/nodes/decide.py · @orchestra/graph.py · @orchestra/agents/ · @shared/llm.py · @docs/PIPELINE_ARCHITECTURE.md · @docs/ORCHESTRA_ARCHITECTURE.md*
+*@LO1: Analyzing · @LO2: Advising · @LO3: Designing · @LO4: Realizing · @LO5: Managing*
