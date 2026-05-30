@@ -1,0 +1,96 @@
+DL-03 — From No UI to a User-Facing AI Layer
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+After DL-02 we had two working agent architectures — Pipeline and Orchestra — that could detect stockouts, flag duplicate invoices, and generate purchase orders. All of it visible only in a terminal. Jenny (the operations manager this is built for) can't read a Python stack trace. The agents were doing real work with zero visibility for the people who actually need to trust them. Nothing was user-facing, nothing explained what Betsy was doing or why, and there was no way for a human to approve or decline a decision. That's the gap DL-03 closes.
+
+
+1. Research question
+
+How should Betsy present autonomous agent decisions to non-technical users in a way that builds trust and keeps humans in control?
+
+
+2. Current LO stage
+
+[x] Analyzing — mapped who needs what from the system
+[x] Advising — recommended a UI pattern with a clear rationale
+[x] Designing — designed the interface from requirements through to working prototype
+[ ] Realizing
+[ ] Managing
+
+
+3. What makes a good decision here
+
+- The UI must be usable by someone with zero technical background without any onboarding
+- Every AI-generated element must be clearly marked so users know what's human and what's machine
+- The design must work as a layer on top of the existing procurement environment, not a replacement for it
+
+
+4. What I decided
+
+Build Betsy's UI following the enterprise AI layer pattern — AI command bar, auto-generated narrative, AI-scored data tables, and inline approval cards — all served from the same FastAPI server as the mock procurement environment.
+
+
+5. Why this decision
+
+Method: Library + Showroom
+
+I started with Library research into how enterprise AI tools actually present AI to non-technical business users. The tools I looked at — Salesforce Einstein, Microsoft Copilot, Tableau Pulse, Glean, Notion AI — all follow the same pattern: the AI is a layer on top of familiar work surfaces, not a separate app. Outputs are short and actionable. There's always a clear signal distinguishing generated content from human-entered data.
+
+From that research I pulled four patterns that map directly onto what Betsy needs to show:
+
+1. AI command bar — a ⌘K prompt for natural language input (what Glean and Copilot use as the entry point)
+2. AI narrative — an auto-generated paragraph that explains the current state in plain English, like Tableau Pulse does with KPI dashboards
+3. AI-scored tables — standard data tables with one AI-generated column, visually distinguished with a sparkle icon (common in Clari, Gong, sales intelligence tools)
+4. Inline approval cards — HITL decisions embedded in the same surface, not a separate app
+
+Before touching any code I wrote the requirements down. @docs/user_requirements.md captures the core design philosophy in one line: "Betsy is a layer on top of the procurement environment, not a replacement." The language rules in that doc are non-negotiable — no system jargon anywhere, Betsy speaks in first person, confidence shown as dots not decimals. The reason for this is straightforward: Jenny has zero tech background and if she sees "trigger: stockout_risk, confidence: 0.87" she'll stop trusting the system immediately.
+
+![Two ASCII wireframe sketches side by side — Version 1 (4-screen standalone) and Version 2 (enterprise AI layer)](./images/dl03-wireframe-comparison.png)
+
+From requirements I went straight to wireframing. @docs/wireframes.md has both versions. Version 1 was a standalone 4-screen dashboard (Home, Approvals, Log, Suppliers) — it looked clean but felt like a separate app Jenny would have to learn. Version 2 applied the enterprise patterns: one surface with an AI command bar at the top, an auto-generated summary card, and the procurement data tables with AI columns added alongside existing columns. That's the direction I went with.
+
+The Showroom phase was building @dashboard/wireframe.html — a fully interactive HTML prototype with working navigation, approve/decline buttons, expandable log entries, and a live badge counter. This let me validate the layout and interaction model before touching the real dashboard.
+
+![wireframe.html open in browser showing the 4 screens — Home status cards, Pending Approvals card with Approve/Decline buttons, Agent Log with expandable entries, Supplier Scoreboard](./images/dl03-wireframe-interactive.png)
+
+What I found: the approval card design matters more than anything else on the screen. The moment a user sees a card that says "Why I'm asking you instead of acting" in plain English, they understand the system. Without that explanation the Approve/Decline buttons feel arbitrary. @docs/wireframes.md:69-82 has the annotation for this — "approval card explains WHY Betsy is unsure — builds trust with non-tech users."
+
+What this means: the HITL design isn't just a UI choice, it's the core trust mechanism. If the explanation isn't there, humans approve things they don't understand, which is worse than not having automation at all.
+
+What I'd recommend: For any AI tool aimed at non-technical users, lead with the reasoning before the action. Don't ask "approve this?" — explain what happened, what you'd normally do, and why you stopped. Then ask. The confidence indicator (dots, not a decimal) should always be visible on approval cards — low confidence is exactly when you want a human involved, and the user should know that's why they're being asked.
+
+GAP: The wireframe was interactive but static — it showed hardcoded data. The next step was wiring it to the live API and making Betsy actually run.
+
+
+6. Does this hold up
+
+- Usable with zero technical background: ✅ — no jargon anywhere in the UI, tested by reading every label out loud as if explaining to a non-technical user
+- Every AI element clearly marked: ✅ — ✦ sparkle on every AI-generated column header, card, and narrative block. The marking is consistent across all four surfaces.
+- Works as a layer not a replacement: ✅ — @dashboard/betsy.html and @dashboard/index.html are two separate files served from the same server. The environment (index.html) is unchanged. Betsy reads from and writes to the same API any human operator would use.
+
+Assumption I'm making: users trust a visual indicator (✦) as a meaningful "AI generated" signal. This is borrowed from how Notion AI and Copilot handle it, but I haven't tested it with real users. Worth validating in a later phase.
+
+What surprised me: The "layer vs replacement" framing resolved a lot of design questions automatically. Once I committed to "Betsy doesn't replace the procurement system," decisions about what to show and what to hide became obvious. I didn't need a separate settings page, a user profile, or a navigation menu — because Betsy isn't an app, it's a lens on top of existing data.
+
+
+7. What this unlocks
+
+Next LO stage: Realizing (DL-04 — wire the design to live data, pick a model, test it)
+
+What I can now do: The design gives a clear target for implementation. Every UI component maps to a specific API endpoint:
+- AI narrative → computed from /api/inventory + /api/agent-log
+- AI Risk column → computed from stock/usage ratio per SKU
+- ✦ Betsy Score → from /api/suppliers reliability_score
+- Approval cards → from /api/approvals (to be built)
+- Run Betsy button → POST /api/run-agent (to be built)
+
+Ongoing monitoring: The key signal that this design works isn't test coverage — it's whether Jenny can open the page and understand what Betsy did without asking anyone. That's the acceptance criteria for the UI layer.
+
+How I'll know this worked: Open betsy.html after a pipeline run. If the narrative says something like "Steel Bolts were running low — I ordered more from FastParts Co." and the inventory table shows ● Critical next to that SKU with "✓ Ordered" in the action column — the design is doing its job.
+
+
+*@docs/user_requirements.md · @docs/wireframes.md · @dashboard/wireframe.html · @dashboard/betsy.html*
+*@LO1: Analyzing · @LO2: Advising · @LO3: Designing*

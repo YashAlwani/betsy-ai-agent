@@ -1,0 +1,128 @@
+DL-04 — Wiring It Up: Implementation, Model Selection, and What "Autonomous" Actually Means
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+DL-03 closed with a working interactive wireframe and a clear design target. The gap was obvious: betsy.html was showing hardcoded demo data, the agent couldn't be triggered from the browser, and there was no LLM model decision — Betsy was still defaulting to Mistral 7B, a choice inherited from the initial setup rather than made deliberately. This DL covers the implementation sprint: wiring betsy.html to the live API, choosing a model, adding the run trigger, cleaning up unused dependencies, and then actually running a scenario end-to-end to see what "autonomous" looks like in practice.
+
+
+1. Research question
+
+How does Betsy's AI layer connect to the procurement environment, and what does autonomous agent behaviour actually look like when it runs against real scenario data?
+
+
+2. Current LO stage
+
+[ ] Analyzing
+[ ] Advising
+[ ] Designing
+[x] Realizing — built the live integration, triggered real agent runs
+[x] Managing — discovered the financial safeguard behaviour, evaluated what counts as "working"
+
+
+3. What makes a good decision here
+
+- betsy.html must show live data from the API with no manual refresh — the user should see agent decisions appear without touching the page
+- The model switch must be justified by a concrete difference in behaviour, not just a version bump
+- Running a scenario end-to-end must produce an observable change in both the AI tool and the environment
+
+
+4. What I decided
+
+Wire betsy.html to the live FastAPI endpoints with a 5-second auto-refresh, add POST /api/run-agent as a background task endpoint, switch the default model from Mistral 7B to Llama 3.1 8B, and run the stockout_warning scenario to validate the full loop.
+
+
+5. Why this decision
+
+Method: Lab + Field
+
+The implementation started with the architecture question: how does betsy.html talk to the server? The answer was already in the codebase — @dashboard/index.html uses plain fetch() calls against the FastAPI endpoints, no framework, no build step. betsy.html follows the same pattern. @docs/api-control-layer.md maps out the full picture: both surfaces (betsy.html and index.html) share the same API, so any action Betsy takes autonomously — posting a PO, logging a decision — shows up in both views immediately.
+
+```javascript
+// betsy.html — same origin, no CORS issues
+const [inventory, suppliers, agentLog] = await Promise.all([
+  get('/api/inventory'),
+  get('/api/suppliers'),
+  get('/api/agent-log'),
+]);
+```
+
+The AI narrative generates client-side from that data — no LLM call needed for the summary. If stock is below reorder point and the agent log has a recent generate_po entry for that SKU, the narrative writes: "Steel Bolts were running low — I ordered more automatically." @dashboard/betsy.html:buildNarrative() handles this in about 20 lines of plain JavaScript.
+
+![betsy.html open in browser showing the live AI narrative, ✦ Risk column in inventory table, and ✦ Betsy Score column in supplier table — all pulling from the live API](./images/dl04-betsy-live-data.png)
+
+The run trigger was the missing piece. Before this sprint, you could only run the agent from a terminal. I added POST /api/run-agent to @server/main.py:
+
+```python
+@app.post("/api/run-agent")
+def run_agent(background_tasks: BackgroundTasks, scenario: str = "", mode: str = "pipeline"):
+    def _run():
+        from pipeline.run import run_full
+        run_full(scenario=scenario or None)
+    background_tasks.add_task(_run)
+    return {"status": "started"}
+```
+
+It returns immediately and runs the agent in a background thread — so the browser doesn't hang waiting for a 30-second LLM call. The scenario chips in betsy.html POST to this endpoint, then the 5-second auto-refresh picks up the results.
+
+![betsy.html scenario chip row — stockout_warning selected (highlighted), Run Betsy button with spinner, status showing "Agent running — updating in ~10s..."](./images/dl04-run-betsy-controls.png)
+
+Model selection: the project was using Mistral 7B by default, inherited from initial setup. The decision to switch came from one clear observation — Mistral 7B was inconsistent with structured JSON output, which is exactly what the decide and evaluate nodes rely on. @shared/llm.py:call_json() already handles malformed JSON with a fallback, but hitting fallback every few calls means the agent is running on rule-based logic instead of LLM reasoning. Llama 3.1 8B is better at instruction following and JSON schema adherence for its size class. After deleting Mistral and the unused llava and older llama3 models (freed ~14GB), Llama 3.1 8B is the only active model:
+
+```python
+# shared/llm.py
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+```
+
+The Lab phase was running the actual scenario. First run with stockout_warning:
+
+![Terminal output of python -m pipeline.run --scenario stockout_warning — showing "Detected 2 conditions: DUPLICATE_INVOICE warning, STOCKOUT critical" and "Actions: FLAG_DUPLICATE pending_human_review, GENERATE_PO pending_human_review"](./images/dl04-pipeline-first-run.png)
+
+The agent ran. It detected two conditions correctly — a duplicate invoice on SKU-004 and a stockout on SKU-003. It decided on both. But both actions came back as pending_human_review. The bot did nothing autonomously.
+
+This felt like a failure. It wasn't. Digging into @pipeline/nodes/decide.py:116-117:
+
+```python
+if po_total > MAX_AUTO_USD:
+    requires_human = True  # financial safeguard cannot be overridden
+```
+
+The stockout_warning scenario orders max_stock - current_stock = 955 units of SKU-003 at $12.50 each — a $11,937 PO. The $5,000 autonomous spending limit correctly blocked it. The safeguard is working exactly as designed. This is the behaviour that would prevent Betsy from accidentally ordering $50,000 of the wrong thing at 3am.
+
+The deeper finding: "the bot did nothing" is the right outcome for a high-value order. Autonomous doesn't mean unconditional — it means acting without human involvement when it's safe to do so, and escalating when it isn't. The boundary between the two is the $5,000 limit, the duplicate invoice rule, and the price spike threshold. All three held up under the first real test.
+
+![index.html open on Agent Log tab showing the two log entries from the pipeline run — trigger: stockout_risk and trigger: duplicate_invoice — appearing without page refresh](./images/dl04-agent-log-live.png)
+
+[video: dl04-two-surfaces-side-by-side.mp4 — betsy.html and index.html open side by side, showing both surfaces updating from the same live API in real time]
+
+What I'd recommend: Don't try to show autonomous action by raising the spending limit to make the demo look better. The financial safeguard IS the demonstration. A procurement agent that escalates a $12,000 order for human review is more trustworthy than one that approves it silently. For a PM or stakeholder demo, the right scenario to show autonomous action is a small, cheap restock — Steel Bolts M8 at $0.18/unit, 500 units = $90 — well under the limit, agent places the order, PO appears in the environment in real time. That's the moment to show. The high-value escalation is the safety story, not a failure.
+
+GAP: The approval queue (decisions with requires_human=True) has nowhere to go yet. @docs/api-control-layer.md:POST /api/approvals is documented but the endpoint doesn't exist. Jenny can't approve the $12k PO from betsy.html — there's no queue, no approve button wired to a real endpoint. That's what DL-05 needs to close.
+
+
+6. Does this hold up
+
+- Live data, no manual refresh: ✅ — betsy.html polls every 5 seconds, index.html every 3 seconds. Running a scenario and watching both tabs update without touching the page works as expected.
+- Model switch justified by behaviour: 🟡 — Llama 3.1 8B is in and the pipeline ran clean in 28 seconds with no fallbacks triggered. But I haven't done a side-by-side comparison of Mistral vs Llama 3.1 output quality on the same prompt. The switch is justified by reputation and size class, not a controlled test. Worth running both on the evaluate node to get real numbers.
+- Observable change end-to-end: ✅ — ran stockout_warning, saw two log entries appear in the Agent Log tab of index.html without refreshing. The narrative in betsy.html updated to reflect the detected conditions. The financial safeguard triggered correctly.
+
+What surprised me: How fast it was to see the system feel alive. The moment the agent log entry appears in the browser while the pipeline is still printing to the terminal — that's the system working. That moment is worth capturing as a screenshot for the portfolio because it shows the actual live integration, not a mockup.
+
+
+7. What this unlocks
+
+Next LO stage: Managing (DL-05 — build the approval queue backend, wire the approve/decline buttons to real API endpoints, add persistence so decisions survive server restarts)
+
+What I can now do:
+- Trigger any of the 4 scenarios from the browser
+- Watch the agent run in the terminal and see decisions appear in betsy.html simultaneously
+- Use both surfaces (betsy.html for Jenny, index.html for dev) against the same live data
+
+Ongoing monitoring: Every pipeline run logs to /api/agent-log. The agent log tab in index.html is the health check — if runs are happening and log entries are appearing, the integration is alive. The confidence score in each entry is the quality signal: if confidence is consistently below 0.6, something in the evaluate or decide nodes is underperforming and the LLM may need a prompt adjustment.
+
+How I'll know this worked: Run stockout_warning, watch the agent log entry appear in index.html without refreshing, open betsy.html and see the narrative mention the stockout. If all three happen in one uninterrupted flow — the implementation is working.
+
+
+*@dashboard/betsy.html · @dashboard/index.html · @server/main.py · @shared/llm.py · @pipeline/nodes/decide.py · @docs/api-control-layer.md*
+*@LO1: Analyzing · @LO2: Advising · @LO3: Designing · @LO4: Realizing · @LO5: Managing*
