@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Betsy — AI Procurement Layer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --ai: #7c3aed;          /* purple — all AI-generated content */
+    --ai-bg: #f5f3ff;
+    --ai-border: #ddd6fe;
+    --green: #059669;
+    --green-bg: #ecfdf5;
+    --amber: #d97706;
+    --amber-bg: #fffbeb;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --blue: #2563eb;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .topbar-logo {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .topbar-logo .spark { color: var(--ai); font-size: 16px; }
+
+  .cmd-bar {
+    flex: 1;
+    max-width: 480px;
+    position: relative;
+  }
+  .cmd-bar input {
+    width: 100%;
+    padding: 7px 14px 7px 36px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .cmd-bar input:focus {
+    border-color: var(--ai);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+  }
+  .cmd-bar input::placeholder { color: var(--muted); }
+  .cmd-bar .cmd-icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .cmd-bar .cmd-hint {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  .topbar-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    display: inline-block;
+  }
+  .status-dot.offline { background: var(--red); }
+  #refresh-ts { font-size: 11px; }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 28px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── AI NARRATIVE ── */
+  .narrative-card {
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+  }
+  .narrative-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 10px;
+  }
+  .ai-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ai);
+    background: rgba(124,58,237,0.1);
+    border: 1px solid var(--ai-border);
+    border-radius: 99px;
+    padding: 2px 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .narrative-ts { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .narrative-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  .narrative-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    padding: 6px 14px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .chip:hover { opacity: 0.82; }
+  .chip-primary { background: var(--ai); color: #fff; }
+  .chip-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+
+  /* ── QUICK ACTIONS ── */
+  .quick-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .quick-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+  .quick-chip {
+    padding: 5px 13px;
+    border-radius: 99px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    box-shadow: var(--shadow);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .quick-chip:hover { border-color: var(--ai); background: var(--ai-bg); }
+
+  /* ── RUN CONTROLS ── */
+  .run-bar {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .run-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; flex-shrink: 0; }
+  .scenario-chip {
+    padding: 5px 13px;
+    border-radius: 99px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .scenario-chip:hover { border-color: var(--ai); color: var(--ai); }
+  .scenario-chip.selected { background: var(--ai); color: #fff; border-color: var(--ai); }
+  .scenario-chip.reset-chip { color: var(--muted); }
+  .scenario-chip.reset-chip:hover { border-color: var(--muted); color: var(--text); }
+  .run-btn {
+    margin-left: auto;
+    padding: 7px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    border: none;
+    background: var(--ai);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .run-btn:hover { opacity: 0.85; }
+  .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .spinner {
+    width: 13px; height: 13px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  .spinner.show { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .run-status { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  .ai-col-note {
+    font-size: 11px;
+    color: var(--ai);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ── TABLES ── */
+  .table-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: #f8fafc;
+    white-space: nowrap;
+  }
+  th.ai-col { color: var(--ai); }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafafa; }
+  .td-name { font-weight: 600; }
+  .td-muted { color: var(--muted); font-size: 12px; }
+
+  /* risk / score indicators */
+  .risk-critical { color: var(--red); font-weight: 700; }
+  .risk-watch    { color: var(--amber); font-weight: 600; }
+  .risk-good     { color: var(--green); }
+  .risk-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 99px;
+  }
+  .risk-badge.critical { background: var(--red-bg); color: var(--red); }
+  .risk-badge.watch    { background: var(--amber-bg); color: var(--amber); }
+  .risk-badge.good     { background: var(--green-bg); color: var(--green); }
+  .action-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 600;
+  }
+  .tag-ordered  { background: var(--green-bg); color: var(--green); }
+  .tag-flagged  { background: var(--amber-bg); color: var(--amber); }
+  .tag-blocked  { background: var(--red-bg); color: var(--red); }
+
+  .dots { letter-spacing: 1px; font-size: 13px; }
+  .speed-chip {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 500;
+  }
+  .speed-fast { background: var(--green-bg); color: var(--green); }
+  .speed-ok   { background: var(--amber-bg); color: var(--amber); }
+  .speed-slow { background: var(--red-bg); color: var(--red); }
+  .issue-flag { font-size: 11px; color: var(--amber); font-weight: 600; margin-left: 4px; }
+
+  /* ── APPROVALS ── */
+  .approval-section .section-header { margin-bottom: 10px; }
+  .approval-count-badge {
+    background: var(--amber);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-left: 8px;
+  }
+
+  .approval-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+  }
+  .approval-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .approval-title { font-size: 14px; font-weight: 700; }
+  .approval-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .approval-reasoning {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin: 10px 0;
+    padding: 10px 14px;
+    background: var(--bg);
+    border-radius: 7px;
+    border-left: 3px solid var(--ai-border);
+    font-style: italic;
+  }
+  .approval-reasoning::before { content: '"'; }
+  .approval-reasoning::after  { content: '"'; }
+  .approval-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .conf-row { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+  .conf-label { font-size: 11px; color: var(--muted); }
+  .conf-dots { font-size: 14px; color: var(--ai); letter-spacing: 1px; }
+  .btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-approve { background: var(--green); color: #fff; }
+  .btn-decline { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  .btn-decline:hover { color: var(--red); border-color: var(--red); background: var(--red-bg); }
+
+  .empty-approvals {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty-approvals .empty-icon { font-size: 24px; margin-bottom: 6px; }
+  .empty-approvals .empty-msg { font-size: 13px; }
+
+  /* ── CMD RESPONSE ── */
+  .cmd-response {
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 13px;
+    line-height: 1.6;
+    display: none;
+  }
+  .cmd-response.show { display: block; }
+  .cmd-response .cmd-res-label { font-size: 11px; font-weight: 700; color: var(--ai); margin-bottom: 6px; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--text);
+    color: #fff;
+    padding: 11px 18px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    transform: translateY(60px);
+    opacity: 0;
+    transition: all 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 200;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .main { padding: 16px; }
+    .cmd-bar { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <span class="spark">✦</span> Betsy
+  </div>
+
+  <div class="cmd-bar">
+    <span class="cmd-icon">⌘</span>
+    <input type="text" id="cmd-input" placeholder="Ask Betsy something..." autocomplete="off" />
+    <span class="cmd-hint">K</span>
+  </div>
+
+  <div class="topbar-status">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Connecting...</span>
+    <span id="refresh-ts"></span>
+  </div>
+</header>
+
+<!-- COMMAND RESPONSE -->
+<div class="main" style="padding-bottom:0; gap:0;">
+  <div class="cmd-response" id="cmd-response">
+    <div class="cmd-res-label">✦ Betsy</div>
+    <div id="cmd-res-text"></div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+
+  <!-- AI NARRATIVE -->
+  <div class="narrative-card">
+    <div class="narrative-header">
+      <span class="ai-badge">✦ AI Summary</span>
+      <span class="narrative-ts" id="narrative-ts">updating...</span>
+    </div>
+    <div class="narrative-text" id="narrative-text">
+      Connecting to the procurement environment...
+    </div>
+    <div class="narrative-actions" id="narrative-actions"></div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div class="quick-row">
+    <span class="quick-label">Jump to</span>
+    <button class="quick-chip" onclick="scrollTo('inv-section')">📦 Inventory</button>
+    <button class="quick-chip" onclick="scrollTo('sup-section')">🏭 Suppliers</button>
+    <button class="quick-chip" onclick="scrollTo('approval-section')">✋ Approvals</button>
+    <button class="quick-chip" onclick="window.open('/', '_blank')">🔧 Environment</button>
+  </div>
+
+  <!-- RUN CONTROLS -->
+  <div class="run-bar">
+    <span class="run-label">Simulate</span>
+    <button class="scenario-chip reset-chip" id="chip-normal"       onclick="selectScenario('')">Normal</button>
+    <button class="scenario-chip"            id="chip-stockout"     onclick="selectScenario('stockout_warning')">📦 Stockout</button>
+    <button class="scenario-chip"            id="chip-price"        onclick="selectScenario('price_spike')">⚠️ Price spike</button>
+    <button class="scenario-chip"            id="chip-duplicate"    onclick="selectScenario('duplicate_invoice')">🔴 Duplicate invoice</button>
+    <button class="scenario-chip"            id="chip-oos"          onclick="selectScenario('supplier_oos')">🚫 Supplier OOS</button>
+    <span class="run-status" id="run-status"></span>
+    <button class="run-btn" id="run-btn" onclick="runAgent()">
+      <div class="spinner" id="spinner"></div>
+      <span id="run-btn-label">✦ Run Betsy</span>
+    </button>
+  </div>
+
+  <!-- INVENTORY TABLE -->
+  <div id="inv-section">
+    <div class="section-header">
+      <span class="section-title">Inventory</span>
+      <span class="ai-col-note">✦ Risk column is AI-assessed</span>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Current stock</th>
+            <th>Days left</th>
+            <th class="ai-col">✦ Risk</th>
+            <th class="ai-col">✦ Action taken</th>
+          </tr>
+        </thead>
+        <tbody id="inv-body">
+          <tr><td colspan="5" style="color:var(--muted);padding:20px;text-align:center;">Loading inventory...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SUPPLIER TABLE -->
+  <div id="sup-section">
+    <div class="section-header">
+      <span class="section-title">Suppliers</span>
+      <span class="ai-col-note">✦ Score updates after each delivery</span>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th class="ai-col">✦ Betsy score</th>
+            <th>Typical speed</th>
+            <th>SKUs supplied</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="sup-body">
+          <tr><td colspan="5" style="color:var(--muted);padding:20px;text-align:center;">Loading suppliers...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- APPROVALS -->
+  <div class="approval-section" id="approval-section">
+    <div class="section-header">
+      <div style="display:flex;align-items:center;">
+        <span class="section-title">Needs your OK</span>
+        <span class="approval-count-badge" id="approval-badge" style="display:none">0</span>
+      </div>
+      <span class="ai-col-note">✦ Betsy stopped here — these need a human call</span>
+    </div>
+    <div id="approval-list">
+      <div class="empty-approvals">
+        <div class="empty-icon">✅</div>
+        <div class="empty-msg">Nothing waiting for your approval right now.</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .main -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = '';   // same origin — FastAPI serves this file
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  async function get(path) {
+    const r = await fetch(API + path);
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }
+
+  async function post(path, body) {
+    const r = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }
+
+  function dots(score) {
+    const n = Math.round((score || 0) * 5);
+    return '●'.repeat(n) + '○'.repeat(5 - n);
+  }
+
+  function daysLeft(item) {
+    return item.daily_usage_avg > 0
+      ? (item.current_stock / item.daily_usage_avg).toFixed(1)
+      : '—';
+  }
+
+  function riskOf(item) {
+    const d = parseFloat(daysLeft(item));
+    if (isNaN(d)) return 'good';
+    if (d <= 2 || item.current_stock < item.reorder_point) return 'critical';
+    if (d <= 5 || item.current_stock < item.reorder_point * 1.3) return 'watch';
+    return 'good';
+  }
+
+  function riskLabel(r) {
+    return { critical: '● Critical', watch: '◐ Watch', good: '○ Good' }[r];
+  }
+
+  function avgLead(supplier) {
+    const cat = supplier.catalog || {};
+    const vals = Object.values(cat).map(v => v.lead_days).filter(Boolean);
+    return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(0) : '—';
+  }
+
+  function speedChip(days) {
+    const d = parseInt(days);
+    if (d <= 2) return `<span class="speed-chip speed-fast">${days} day${d > 1 ? 's' : ''}</span>`;
+    if (d <= 4) return `<span class="speed-chip speed-ok">${days} days</span>`;
+    return `<span class="speed-chip speed-slow">${days} days</span>`;
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return '';
+    const diff = (Date.now() - new Date(ts)) / 1000;
+    if (diff < 60)   return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  }
+
+  function scrollTo(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // ── AI Narrative generator ────────────────────────────────────────────────────
+  function buildNarrative(inventory, agentLog, pendingApprovals) {
+    const critical = inventory.filter(i => riskOf(i) === 'critical');
+    const watching = inventory.filter(i => riskOf(i) === 'watch');
+    const recentLog = [...(agentLog || [])].slice(-10);
+    const autoOrders = recentLog.filter(e => e.decision === 'generate_po' && !e.metadata?.requires_human);
+    const pending = pendingApprovals || [];
+    const dupeFlags = recentLog.filter(e => e.decision === 'flag_duplicate');
+
+    const sentences = [];
+
+    if (critical.length === 0 && pending.length === 0 && dupeFlags.length === 0) {
+      sentences.push('Everything looks good right now. Inventory levels are healthy and there are no outstanding issues.');
+    } else {
+      if (critical.length > 0) {
+        const names = critical.map(i => i.name).join(' and ');
+        if (autoOrders.length > 0) {
+          sentences.push(`${names} ${critical.length > 1 ? 'were' : 'was'} critically low — I've already placed the order${autoOrders.length > 1 ? 's' : ''} automatically.`);
+        } else {
+          sentences.push(`${names} ${critical.length > 1 ? 'are' : 'is'} critically low and may need attention.`);
+        }
+      }
+      if (watching.length > 0) {
+        const names = watching.map(i => i.name).join(' and ');
+        sentences.push(`${names} ${watching.length > 1 ? 'are' : 'is'} worth watching — stock is getting lower.`);
+      }
+      if (dupeFlags.length > 0) {
+        sentences.push(`I flagged ${dupeFlags.length} possible duplicate invoice${dupeFlags.length > 1 ? 's' : ''} for the finance team.`);
+      }
+      if (pending.length > 0) {
+        sentences.push(`${pending.length} item${pending.length > 1 ? 's need' : ' needs'} your call before I can act.`);
+      }
+    }
+
+    return sentences.join(' ');
+  }
+
+  function buildNarrativeActions(pending) {
+    const el = document.getElementById('narrative-actions');
+    el.innerHTML = '';
+    if (pending.length > 0) {
+      const btn = document.createElement('button');
+      btn.className = 'chip chip-primary';
+      btn.innerHTML = `✋ Review ${pending.length} item${pending.length > 1 ? 's' : ''}`;
+      btn.onclick = () => scrollTo('approval-section');
+      el.appendChild(btn);
+    }
+    const logBtn = document.createElement('button');
+    logBtn.className = 'chip chip-ghost';
+    logBtn.innerHTML = '📋 Open full environment';
+    logBtn.onclick = () => window.open('/', '_blank');
+    el.appendChild(logBtn);
+  }
+
+  // ── Render: Inventory ─────────────────────────────────────────────────────────
+  function renderInventory(inventory, agentLog) {
+    const recentActions = {};
+    (agentLog || []).forEach(e => {
+      const sku = e.metadata?.sku_id;
+      if (sku) recentActions[sku] = e;
+    });
+
+    document.getElementById('inv-body').innerHTML = inventory
+      .sort((a, b) => {
+        const order = { critical: 0, watch: 1, good: 2 };
+        return order[riskOf(a)] - order[riskOf(b)];
+      })
+      .map(item => {
+        const risk = riskOf(item);
+        const d    = daysLeft(item);
+        const last = recentActions[item.sku_id];
+
+        let actionTag = '<span style="color:var(--muted)">—</span>';
+        if (last) {
+          if (last.decision === 'generate_po')
+            actionTag = '<span class="action-tag tag-ordered">✓ Ordered</span>';
+          else if (last.decision === 'flag_for_approval' || last.decision === 'flag_duplicate')
+            actionTag = '<span class="action-tag tag-flagged">⚠ Flagged</span>';
+          else if (last.decision === 'escalate')
+            actionTag = '<span class="action-tag tag-blocked">↑ Escalated</span>';
+        }
+
+        const dLabel = parseFloat(d) <= 2
+          ? `<span style="color:var(--red);font-weight:700">${d} days</span>`
+          : parseFloat(d) <= 5
+            ? `<span style="color:var(--amber)">${d} days</span>`
+            : `${d} days`;
+
+        return `<tr>
+          <td>
+            <div class="td-name">${item.name}</div>
+            <div class="td-muted">${item.sku_id} · ${item.category}</div>
+          </td>
+          <td>${item.current_stock.toLocaleString()} ${item.unit}</td>
+          <td>${dLabel}</td>
+          <td><span class="risk-badge ${risk}">${riskLabel(risk)}</span></td>
+          <td>${actionTag}</td>
+        </tr>`;
+      }).join('');
+  }
+
+  // ── Render: Suppliers ─────────────────────────────────────────────────────────
+  function renderSuppliers(suppliers, agentLog) {
+    const flaggedSuppliers = new Set();
+    (agentLog || []).forEach(e => {
+      if (e.decision === 'flag_duplicate' && e.metadata?.supplier_id)
+        flaggedSuppliers.add(e.metadata.supplier_id);
+    });
+
+    const sorted = [...suppliers].sort((a, b) => b.reliability_score - a.reliability_score);
+
+    document.getElementById('sup-body').innerHTML = sorted.map(sup => {
+      const lead = avgLead(sup);
+      const hasFlaggedIssue = flaggedSuppliers.has(sup.supplier_id);
+      const skuCount = Object.keys(sup.catalog || {}).length;
+
+      const statusCell = hasFlaggedIssue
+        ? `<span style="color:var(--amber);font-weight:600;">Good <span class="issue-flag">⚠ Invoice</span></span>`
+        : sup.availability
+          ? `<span style="color:var(--green)">✓ Available</span>`
+          : `<span style="color:var(--red)">✗ Unavailable</span>`;
+
+      return `<tr>
+        <td class="td-name">${sup.name}</td>
+        <td>
+          <span class="dots" style="color:var(--ai)">${dots(sup.reliability_score)}</span>
+        </td>
+        <td>${speedChip(lead)}</td>
+        <td>${skuCount} SKU${skuCount !== 1 ? 's' : ''}</td>
+        <td>${statusCell}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Render: Approvals ─────────────────────────────────────────────────────────
+  let pendingApprovals = [];
+
+  function renderApprovals(items) {
+    pendingApprovals = items || [];
+    const badge  = document.getElementById('approval-badge');
+    const list   = document.getElementById('approval-list');
+
+    if (!pendingApprovals.length) {
+      badge.style.display = 'none';
+      list.innerHTML = `<div class="empty-approvals">
+        <div class="empty-icon">✅</div>
+        <div class="empty-msg">Nothing waiting for your approval right now.</div>
+      </div>`;
+      return;
+    }
+
+    badge.style.display = 'inline';
+    badge.textContent = pendingApprovals.length;
+
+    list.innerHTML = pendingApprovals.map(item => {
+      const conf  = item.confidence || 0.4;
+      const cost  = item.po_total ? `€${item.po_total.toLocaleString('en', {minimumFractionDigits:0})}` : '';
+      const meta  = [item.supplier_id, item.sku_id, cost].filter(Boolean).join(' · ');
+      const title = item.action === 'generate_po'
+        ? `⚠ ${item.sku_id || 'Item'} — price or quantity needs your review`
+        : item.action === 'flag_for_approval'
+          ? `⚠ Price spike — ${item.sku_id || 'item'}`
+          : `⚠ ${item.action}`;
+
+      return `<div class="approval-card" id="appr-${item.decision_id}">
+        <div class="approval-card-header">
+          <div>
+            <div class="approval-title">${title}</div>
+            <div class="approval-meta">${meta}</div>
+          </div>
+          <span class="ai-badge">✦ AI flagged</span>
+        </div>
+        ${item.reasoning ? `<div class="approval-reasoning">${item.reasoning}</div>` : ''}
+        <div class="approval-footer">
+          <div class="conf-row">
+            <span class="conf-label">Confidence</span>
+            <span class="conf-dots">${dots(conf)}</span>
+          </div>
+          <button class="btn btn-decline" onclick="handleDecline('${item.decision_id}')">❌ Skip this</button>
+          <button class="btn btn-approve" onclick="handleApprove('${item.decision_id}')">✅ Yes, go ahead</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Approval actions
+  async function handleApprove(id) {
+    try {
+      await post(`/api/approvals/${id}/approve`, {});
+      document.getElementById(`appr-${id}`)?.remove();
+      pendingApprovals = pendingApprovals.filter(a => a.decision_id !== id);
+      renderApprovals(pendingApprovals);
+      toast('✅ Approved — order is being placed.');
+      setTimeout(refresh, 1500);
+    } catch {
+      toast('Could not reach server — try again.');
+    }
+  }
+
+  async function handleDecline(id) {
+    try {
+      await post(`/api/approvals/${id}/reject`, {});
+      document.getElementById(`appr-${id}`)?.remove();
+      pendingApprovals = pendingApprovals.filter(a => a.decision_id !== id);
+      renderApprovals(pendingApprovals);
+      toast('❌ Skipped — Betsy will flag again if the issue persists.');
+      setTimeout(refresh, 1500);
+    } catch {
+      toast('Could not reach server — try again.');
+    }
+  }
+
+  // ── Scenario + Run controls ───────────────────────────────────────────────────
+  let selectedScenario = '';
+
+  function selectScenario(name) {
+    selectedScenario = name;
+    document.querySelectorAll('.scenario-chip').forEach(c => c.classList.remove('selected'));
+    const chipId = name
+      ? `chip-${name.replace('_warning','').replace('_spike','').replace('_invoice','')}`
+      : 'chip-normal';
+    document.getElementById(chipId)?.classList.add('selected');
+    if (!name) document.getElementById('chip-normal').classList.add('selected');
+  }
+
+  async function runAgent() {
+    const btn     = document.getElementById('run-btn');
+    const label   = document.getElementById('run-btn-label');
+    const spinner = document.getElementById('spinner');
+    const status  = document.getElementById('run-status');
+
+    btn.disabled = true;
+    spinner.classList.add('show');
+    label.textContent = 'Running...';
+    status.textContent = selectedScenario ? `scenario: ${selectedScenario}` : 'checking everything';
+
+    try {
+      const params = new URLSearchParams({ mode: 'pipeline' });
+      if (selectedScenario) params.set('scenario', selectedScenario);
+      await post(`/api/run-agent?${params}`, {});
+
+      // Poll for new log entry — agent runs async, give it time
+      status.textContent = 'Agent running — updating in ~10s...';
+      setTimeout(async () => {
+        await refresh();
+        status.textContent = 'Done · ' + new Date().toLocaleTimeString();
+      }, 4000);
+      setTimeout(async () => {
+        await refresh();
+      }, 10000);
+
+    } catch (e) {
+      status.textContent = 'Error — is the server running?';
+      toast('Could not trigger agent — check the server.');
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        spinner.classList.remove('show');
+        label.textContent = '✦ Run Betsy';
+      }, 4000);
+    }
+  }
+
+  // init chip state
+  selectScenario('');
+
+  // ── ⌘K Command bar ───────────────────────────────────────────────────────────
+  const CANNED = {
+    'stockout':   'There are {n} items below the reorder point. I\'ve handled the ones I could automatically — check the Inventory section above for details.',
+    'critical':   'Items flagged as ● Critical have less than 2 days of stock left. I place orders automatically for these when a reliable supplier is available and the total is under €5,000.',
+    'supplier':   'I score suppliers based on their reliability history. Scores update automatically after each delivery. ●●●●● means consistently on time and accurate.',
+    'approve':    'When I\'m not sure about a decision — usually because the price looks unusual or the amount is high — I stop and put it in the "Needs your OK" section for you to review.',
+    'confidence': 'Confidence dots (●●●○○) show how sure I am about a recommendation. Low confidence (●●○○○) means I want a human to double-check before I act.',
+    'invoice':    'I check all incoming invoices against recent purchase orders. If I see the same amount from the same supplier twice in 60 days, I flag it as a possible duplicate.',
+  };
+
+  document.getElementById('cmd-input').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const q = e.target.value.trim().toLowerCase();
+    e.target.value = '';
+    const resEl   = document.getElementById('cmd-response');
+    const textEl  = document.getElementById('cmd-res-text');
+
+    const key = Object.keys(CANNED).find(k => q.includes(k));
+    if (key) {
+      const critical = document.querySelectorAll('.risk-badge.critical').length;
+      textEl.textContent = CANNED[key].replace('{n}', critical);
+      resEl.classList.add('show');
+      setTimeout(() => resEl.classList.remove('show'), 8000);
+    } else if (q.length > 2) {
+      textEl.textContent = 'I can answer questions about stockouts, critical items, suppliers, approvals, confidence, and invoices. Try one of those.';
+      resEl.classList.add('show');
+      setTimeout(() => resEl.classList.remove('show'), 6000);
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      document.getElementById('cmd-input').focus();
+    }
+  });
+
+  // ── Main refresh ──────────────────────────────────────────────────────────────
+  async function refresh() {
+    try {
+      const [inventory, suppliers, agentLog] = await Promise.all([
+        get('/api/inventory'),
+        get('/api/suppliers'),
+        get('/api/agent-log'),
+      ]);
+
+      let approvals = [];
+      try { approvals = await get('/api/approvals'); } catch { /* endpoint not yet built */ }
+
+      const narrative = buildNarrative(inventory, agentLog, approvals);
+      document.getElementById('narrative-text').textContent = narrative;
+      document.getElementById('narrative-ts').textContent = 'updated ' + timeAgo(new Date().toISOString());
+      buildNarrativeActions(approvals);
+
+      renderInventory(inventory, agentLog);
+      renderSuppliers(suppliers, agentLog);
+      renderApprovals(approvals);
+
+      const dot  = document.getElementById('status-dot');
+      const text = document.getElementById('status-text');
+      dot.className = 'status-dot';
+      text.textContent = 'Active · ' + new Date().toLocaleTimeString();
+
+    } catch {
+      const dot  = document.getElementById('status-dot');
+      const text = document.getElementById('status-text');
+      dot.className = 'status-dot offline';
+      text.textContent = 'Offline — start server: uvicorn server.main:app --port 8000';
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 5000);
+</script>
+</body>
+</html>

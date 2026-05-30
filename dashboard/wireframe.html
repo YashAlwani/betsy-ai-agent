@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Betsy — Wireframe</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --sidebar-bg: #0f172a;
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --green: #10b981;
+    --green-bg: #ecfdf5;
+    --amber: #f59e0b;
+    --amber-bg: #fffbeb;
+    --red: #ef4444;
+    --red-bg: #fef2f2;
+    --blue: #3b82f6;
+    --blue-bg: #eff6ff;
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 230px;
+    background: var(--sidebar-bg);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 16px;
+    flex-shrink: 0;
+  }
+  .sidebar-logo {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+    color: #fff;
+  }
+  .sidebar-logo span { color: var(--accent); }
+  .sidebar-tagline {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-bottom: 32px;
+    line-height: 1.5;
+  }
+  .nav-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #475569;
+    padding: 0 10px;
+    margin-bottom: 8px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #cbd5e1;
+    transition: background 0.15s, color 0.15s;
+    margin-bottom: 2px;
+    user-select: none;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+  .nav-item.active { background: var(--accent); color: #fff; }
+  .nav-item .badge {
+    margin-left: auto;
+    background: var(--amber);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 99px;
+  }
+  .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    font-size: 11px;
+    color: #475569;
+    padding: 12px 10px;
+    border-top: 1px solid #1e293b;
+    line-height: 1.6;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  /* ── MAIN ── */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 36px;
+  }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .page-title { font-size: 22px; font-weight: 700; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .page-badge {
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 99px;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px 24px;
+  }
+
+  /* ── HOME SCREEN ── */
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .status-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.1s;
+  }
+  .status-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .status-icon { font-size: 22px; margin-bottom: 4px; }
+  .status-count { font-size: 32px; font-weight: 800; line-height: 1; }
+  .status-count.amber { color: var(--amber); }
+  .status-count.green { color: var(--green); }
+  .status-count.red { color: var(--red); }
+  .status-label { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .status-action {
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 6px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .activity-list { display: flex; flex-direction: column; gap: 1px; }
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .dot-green { background: var(--green); }
+  .dot-amber { background: var(--amber); }
+  .dot-red { background: var(--red); }
+  .dot-blue { background: var(--blue); }
+  .activity-text { flex: 1; font-size: 14px; line-height: 1.5; }
+  .activity-text strong { font-weight: 600; }
+  .activity-time { font-size: 12px; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+
+  /* ── APPROVALS SCREEN ── */
+  .approval-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin-bottom: 16px;
+    border-left: 4px solid var(--amber);
+  }
+  .approval-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .approval-section { margin-bottom: 14px; }
+  .approval-section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .approval-section-text { font-size: 14px; line-height: 1.6; color: var(--text); }
+  .approval-cost {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text);
+    margin-top: 2px;
+  }
+  .confidence-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .confidence-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .confidence-dots { font-size: 16px; letter-spacing: 2px; }
+  .approval-actions { display: flex; gap: 12px; }
+  .btn {
+    padding: 11px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { opacity: 0.88; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-approve { background: var(--green); color: #fff; }
+  .btn-decline { background: #f1f5f9; color: #475569; border: 1px solid var(--border); }
+  .btn-decline:hover { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state .empty-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .empty-state .empty-text { font-size: 14px; }
+
+  /* ── LOG SCREEN ── */
+  .log-day-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 24px 0 8px;
+  }
+  .log-day-label:first-child { margin-top: 0; }
+  .log-item {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .log-item-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .log-item-header:hover { background: #fafafa; }
+  .log-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 99px;
+    flex-shrink: 0;
+  }
+  .pill-auto { background: var(--green-bg); color: var(--green); }
+  .pill-approved { background: var(--blue-bg); color: var(--blue); }
+  .pill-flagged { background: var(--amber-bg); color: var(--amber); }
+  .pill-blocked { background: var(--red-bg); color: var(--red); }
+  .log-text { flex: 1; font-size: 14px; }
+  .log-text strong { font-weight: 600; }
+  .log-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .log-expand { font-size: 12px; color: var(--accent); margin-left: 4px; }
+  .log-detail {
+    display: none;
+    padding: 0 18px 16px 42px;
+    font-size: 13px;
+    color: #475569;
+    line-height: 1.7;
+    border-top: 1px solid var(--border);
+    background: #fafafa;
+  }
+  .log-detail.open { display: block; }
+  .log-detail-title { font-weight: 600; color: var(--text); margin-bottom: 4px; margin-top: 12px; }
+
+  /* ── SUPPLIERS SCREEN ── */
+  .supplier-table { width: 100%; border-collapse: collapse; }
+  .supplier-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 0 16px 12px;
+  }
+  .supplier-table td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-top: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .supplier-table tr:hover td { background: #f8fafc; }
+  .supplier-name { font-weight: 600; }
+  .supplier-note { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .dots { font-size: 15px; letter-spacing: 1px; }
+  .speed-chip {
+    display: inline-block;
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-weight: 500;
+  }
+  .speed-fast { background: var(--green-bg); color: var(--green); }
+  .speed-ok { background: var(--amber-bg); color: var(--amber); }
+  .speed-slow { background: var(--red-bg); color: var(--red); }
+  .issue-tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: var(--amber-bg);
+    color: var(--amber);
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .table-note {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 14px 16px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 28px; right: 28px;
+    background: var(--text);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">B<span>etsy</span></div>
+  <div class="sidebar-tagline">Procurement assistant<br/>by your side, not in the way</div>
+
+  <div class="nav-label">Overview</div>
+  <div class="nav-item active" onclick="goto('home', this)">
+    <span class="nav-icon">🏠</span> Home
+  </div>
+
+  <div class="nav-label" style="margin-top:16px">Actions</div>
+  <div class="nav-item" onclick="goto('approvals', this)">
+    <span class="nav-icon">✋</span> Needs your OK
+    <span class="badge" id="approval-badge">1</span>
+  </div>
+  <div class="nav-item" onclick="goto('log', this)">
+    <span class="nav-icon">📋</span> What Betsy did
+  </div>
+  <div class="nav-item" onclick="goto('suppliers', this)">
+    <span class="nav-icon">🏭</span> Suppliers
+  </div>
+
+  <div class="sidebar-footer">
+    <span class="status-dot"></span> Betsy is active<br/>
+    Last check: 2 min ago<br/>
+    Runs every 15 min
+  </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+
+  <!-- ── HOME ── -->
+  <div class="screen active" id="screen-home">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Good morning, Jenny 👋</div>
+        <div class="page-sub">Here's what happened while you were away</div>
+      </div>
+      <div class="page-badge">Friday, 30 May 2026</div>
+    </div>
+
+    <div class="status-grid">
+      <div class="status-card" onclick="goto('approvals', document.querySelector('.nav-item:nth-child(5)'))">
+        <div class="status-icon">✋</div>
+        <div class="status-count amber" id="home-pending">1</div>
+        <div class="status-label">Needs your approval</div>
+        <div class="status-action">Review →</div>
+      </div>
+      <div class="status-card">
+        <div class="status-icon">✅</div>
+        <div class="status-count green">3</div>
+        <div class="status-label">Handled automatically</div>
+        <div class="status-action" style="color:var(--green)">All good</div>
+      </div>
+      <div class="status-card">
+        <div class="status-icon">🚨</div>
+        <div class="status-count green">0</div>
+        <div class="status-label">Critical alerts</div>
+        <div class="status-action" style="color:var(--green)">Nothing urgent</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Recent activity</div>
+      <div class="activity-list">
+        <div class="activity-item">
+          <div class="activity-dot dot-amber"></div>
+          <div class="activity-text">
+            <strong>Copper Wire — price looks unusual.</strong> All suppliers are quoting 60% above normal. Waiting for your OK before ordering.
+          </div>
+          <div class="activity-time">8h ago</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-dot dot-green"></div>
+          <div class="activity-text">
+            <strong>Ordered 500× Steel Bolts M8</strong> from FastParts Co. for €90. Stock was running low — 2 days left.
+          </div>
+          <div class="activity-time">10h ago</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-dot dot-green"></div>
+          <div class="activity-text">
+            <strong>Ordered 200× Hydraulic Seals</strong> from QuickShip Express for €340. Critical stock, fastest delivery chosen.
+          </div>
+          <div class="activity-time">Yesterday</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-dot dot-red"></div>
+          <div class="activity-text">
+            <strong>Flagged a possible duplicate invoice</strong> from PrecisionParts — same amount billed twice. Marked for finance review.
+          </div>
+          <div class="activity-time">Yesterday</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── APPROVALS ── -->
+  <div class="screen" id="screen-approvals">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Needs your approval</div>
+        <div class="page-sub">Betsy stopped here — these need a human call</div>
+      </div>
+    </div>
+
+    <div id="approval-list">
+      <div class="approval-card" id="approval-copper">
+        <div class="approval-title">
+          ⚠️ Copper Wire — price looks unusual
+        </div>
+
+        <div class="approval-section">
+          <div class="approval-section-label">What's happening</div>
+          <div class="approval-section-text">
+            The usual price is €4.20/m. Today all suppliers are quoting €6.80–€7.10/m — about 60% higher than normal. This kind of jump usually means a market issue, a supply shortage, or a data error.
+          </div>
+        </div>
+
+        <div class="approval-section">
+          <div class="approval-section-label">What I'd normally do</div>
+          <div class="approval-section-text">
+            Order 300m from BulkSupply Co. — cheapest available option.
+          </div>
+          <div class="approval-cost">€2,040 total</div>
+        </div>
+
+        <div class="approval-section">
+          <div class="approval-section-label">Why I'm asking you instead</div>
+          <div class="approval-section-text">
+            This price jump is outside what I've seen before. You might know something I don't — a market spike, a supplier error, or a reason to wait. You know better than I do on this one.
+          </div>
+        </div>
+
+        <div class="confidence-row">
+          <span class="confidence-label">Betsy's confidence</span>
+          <span class="confidence-dots">●●○○○</span>
+          <span style="font-size:12px;color:var(--muted)">Low — that's why I stopped</span>
+        </div>
+
+        <div class="approval-actions">
+          <button class="btn btn-approve" onclick="approve('approval-copper', '✅ Order placed — 300m Copper Wire from BulkSupply Co. for €2,040.')">
+            ✅ Yes, go ahead
+          </button>
+          <button class="btn btn-decline" onclick="decline('approval-copper', '❌ Skipped — Copper Wire order declined. Betsy will check again on the next run.')">
+            ❌ No, skip this
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="empty-state" id="approval-empty" style="display:none">
+      <div class="empty-icon">✅</div>
+      <div class="empty-title">Nothing needs your attention right now</div>
+      <div class="empty-text">Betsy is handling things. You'll be notified when something needs a human call.</div>
+    </div>
+  </div>
+
+  <!-- ── LOG ── -->
+  <div class="screen" id="screen-log">
+    <div class="page-header">
+      <div>
+        <div class="page-title">What Betsy did</div>
+        <div class="page-sub">Full history of decisions — expand any item for the reasoning</div>
+      </div>
+      <div class="page-badge">Last 7 days</div>
+    </div>
+
+    <div class="card">
+      <div class="log-day-label">Today</div>
+
+      <div class="log-item">
+        <div class="log-item-header" onclick="toggleLog(this)">
+          <span class="log-pill pill-flagged">Waiting for you</span>
+          <div class="log-text"><strong>Copper Wire</strong> — price 60% above normal, flagged for approval</div>
+          <div class="log-time">08:30</div>
+          <span class="log-expand">▼</span>
+        </div>
+        <div class="log-detail">
+          <div class="log-detail-title">What happened</div>
+          All 3 available suppliers quoted €6.80–€7.10/m against a 30-day average of €4.20/m. Price spike threshold is 30% — this hit 62%.
+          <div class="log-detail-title">Why I stopped</div>
+          My confidence was too low to spend €2,040 autonomously. Moved to your approval queue.
+        </div>
+      </div>
+
+      <div class="log-item">
+        <div class="log-item-header" onclick="toggleLog(this)">
+          <span class="log-pill pill-auto">Auto</span>
+          <div class="log-text"><strong>Steel Bolts M8</strong> — ordered 500 units from FastParts Co. · €90</div>
+          <div class="log-time">10:14</div>
+          <span class="log-expand">▼</span>
+        </div>
+        <div class="log-detail">
+          <div class="log-detail-title">What happened</div>
+          Stock was at 240 units with daily usage of 120 — 2 days remaining before stockout.
+          <div class="log-detail-title">Why FastParts Co.</div>
+          Best score after weighing reliability (0.95) and delivery speed (2 days). Total €90 was well under the autonomous spending limit.
+          <div class="log-detail-title">Expected delivery</div>
+          Monday 1 June — 2 working days from today.
+        </div>
+      </div>
+
+      <div class="log-day-label">Yesterday</div>
+
+      <div class="log-item">
+        <div class="log-item-header" onclick="toggleLog(this)">
+          <span class="log-pill pill-auto">Auto</span>
+          <div class="log-text"><strong>Hydraulic Seals</strong> — ordered 200 units from QuickShip Express · €340</div>
+          <div class="log-time">16:02</div>
+          <span class="log-expand">▼</span>
+        </div>
+        <div class="log-detail">
+          <div class="log-detail-title">What happened</div>
+          Critical item. Stock at 15 units, 1.2 days remaining. Chose fastest supplier even at slightly higher price.
+          <div class="log-detail-title">Why QuickShip</div>
+          1-day delivery vs 2–5 days from alternatives. For a critical item, speed beats cost.
+        </div>
+      </div>
+
+      <div class="log-item">
+        <div class="log-item-header" onclick="toggleLog(this)">
+          <span class="log-pill pill-blocked">Flagged</span>
+          <div class="log-text"><strong>Duplicate invoice</strong> — PrecisionParts billed INV-2024-0291 twice</div>
+          <div class="log-time">14:55</div>
+          <span class="log-expand">▼</span>
+        </div>
+        <div class="log-detail">
+          <div class="log-detail-title">What happened</div>
+          Two invoices from PrecisionParts for the same amount (€840) within 12 days. Likely a billing error, but could be fraud.
+          <div class="log-detail-title">What I did</div>
+          Flagged for finance team review. No payment was made. The duplicate is on hold until resolved.
+        </div>
+      </div>
+
+      <div class="log-item">
+        <div class="log-item-header" onclick="toggleLog(this)">
+          <span class="log-pill pill-approved">You approved</span>
+          <div class="log-text"><strong>Aluminium Sheets</strong> — ordered 100 units from BulkSupply Co. · €1,200</div>
+          <div class="log-time">09:15</div>
+          <span class="log-expand">▼</span>
+        </div>
+        <div class="log-detail">
+          <div class="log-detail-title">What happened</div>
+          I flagged this because the order total (€1,200) was close to a margin I wanted to double-check. You approved it.
+          <div class="log-detail-title">Outcome</div>
+          Order placed. Expected delivery: 3 June.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SUPPLIERS ── -->
+  <div class="screen" id="screen-suppliers">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Suppliers</div>
+        <div class="page-sub">Track record updates automatically after each delivery</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow:hidden;">
+      <table class="supplier-table">
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th>Track record</th>
+            <th>Typical speed</th>
+            <th>Last order</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="supplier-name">FastParts Co.</div>
+              <div class="supplier-note">SUP-001 · Net 30</div>
+            </td>
+            <td><span class="dots">●●●●○</span></td>
+            <td><span class="speed-chip speed-fast">2 days</span></td>
+            <td>Today, 10:14</td>
+            <td style="color:var(--green);font-weight:600;font-size:13px;">Good</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="supplier-name">QuickShip Express</div>
+              <div class="supplier-note">SUP-003 · Net 15</div>
+            </td>
+            <td><span class="dots">●●●●●</span></td>
+            <td><span class="speed-chip speed-fast">1 day</span></td>
+            <td>Yesterday</td>
+            <td style="color:var(--green);font-weight:600;font-size:13px;">Great</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="supplier-name">BulkSupply Co.</div>
+              <div class="supplier-note">SUP-002 · Net 45</div>
+            </td>
+            <td><span class="dots">●●●○○</span></td>
+            <td><span class="speed-chip speed-ok">5 days</span></td>
+            <td>2 weeks ago</td>
+            <td style="color:var(--muted);font-weight:600;font-size:13px;">OK</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="supplier-name">PrecisionParts</div>
+              <div class="supplier-note">SUP-004 · Net 30</div>
+            </td>
+            <td><span class="dots">●●●●○</span></td>
+            <td><span class="speed-chip speed-ok">3 days</span></td>
+            <td>2 weeks ago</td>
+            <td>
+              <span style="color:var(--amber);font-weight:600;font-size:13px;">Good</span>
+              <span class="issue-tag">⚠️ Invoice issue</span>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="supplier-name">ValueFirst</div>
+              <div class="supplier-note">SUP-005 · Net 60</div>
+            </td>
+            <td><span class="dots">●●○○○</span></td>
+            <td><span class="speed-chip speed-slow">7 days</span></td>
+            <td>1 month ago</td>
+            <td style="color:var(--muted);font-weight:600;font-size:13px;">Slow</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="table-note">
+        ● Track record is based on on-time deliveries. Updates automatically after each order is received.
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+  function goto(screenId, navEl) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('screen-' + screenId).classList.add('active');
+    if (navEl) navEl.classList.add('active');
+  }
+
+  function toggleLog(header) {
+    const detail = header.nextElementSibling;
+    const arrow = header.querySelector('.log-expand');
+    const open = detail.classList.toggle('open');
+    arrow.textContent = open ? '▲' : '▼';
+  }
+
+  let pendingCount = 1;
+
+  function approve(cardId, msg) {
+    document.getElementById(cardId).style.display = 'none';
+    pendingCount = Math.max(0, pendingCount - 1);
+    updatePendingBadge();
+    showToast(msg);
+  }
+
+  function decline(cardId, msg) {
+    document.getElementById(cardId).style.display = 'none';
+    pendingCount = Math.max(0, pendingCount - 1);
+    updatePendingBadge();
+    showToast(msg);
+  }
+
+  function updatePendingBadge() {
+    const badge = document.getElementById('approval-badge');
+    const homePending = document.getElementById('home-pending');
+    badge.textContent = pendingCount;
+    homePending.textContent = pendingCount;
+    if (pendingCount === 0) {
+      badge.style.display = 'none';
+      document.getElementById('approval-empty').style.display = 'block';
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+</script>
+</body>
+</html>
