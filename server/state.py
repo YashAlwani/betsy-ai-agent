@@ -17,6 +17,10 @@ class AppState:
         self.approvals: list = []
         self.active_scenario: str = "normal"
         self.load()
+        from server import db as _db
+        _db.init_db()
+        self.agent_log = _db.load_log_entries()
+        self.approvals = _db.load_all_approvals()
 
     def load(self):
         self._base = {
@@ -33,6 +37,8 @@ class AppState:
         self._current = deepcopy(self._base)
         self.agent_log = []
         self.active_scenario = "normal"
+        from server import db as _db
+        _db.clear_log()
 
     def apply_scenario(self, name: str) -> dict:
         path = SCENARIOS / f"{name}.json"
