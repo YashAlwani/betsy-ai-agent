@@ -1,5 +1,6 @@
 """Stage 4 -- convert evaluated items into decisions. LLM provides reasoning."""
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -8,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from shared.llm import call_json, get_llm
 from pipeline.state import PipelineState
 
-MAX_AUTO_USD = 5000.0
+MAX_AUTO_USD = float(os.getenv("MAX_AUTO_USD", "5000"))
 
 
 def run(evaluated: list, llm=None) -> dict:

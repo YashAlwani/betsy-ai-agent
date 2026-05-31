@@ -14,6 +14,7 @@ class AppState:
         self._base: dict = {}
         self._current: dict = {}
         self.agent_log: list = []
+        self.approvals: list = []
         self.active_scenario: str = "normal"
         self.load()
 

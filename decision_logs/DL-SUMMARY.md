@@ -46,13 +46,13 @@ Wired betsy.html to the live API, added POST /api/run-agent as a background task
 
 ---
 
-## DL-05 — The approval queue (HITL end-to-end)
-`DL-05-hitl-approval-flow.txt` ← *not written yet*
+## DL-05 — Closing the loop: HITL approval queue end-to-end
+`DL-05-hitl-approval-flow.txt`
 
-When Betsy escalates, where does it go? How does Jenny approve or decline from betsy.html and have that trigger a real PO? This is the human-in-the-loop mechanism working end-to-end — not just flagged in a log, but a real queue with real actions.
+Built /api/approvals — GET pending, POST approve/reject. act.py queues every requires_human decision to it with the full PO payload pre-built. Approve executes the deferred PO directly in state. 11/11 test cases passed. Bug found: state.reset() was wiping the approval queue after every pipeline run — fixed by keeping approvals independent of scenario state.
 
-**Status:** TODO
-**GAP → DL-06:** TBD
+**Decision:** Store the full payload at queue time, execute on approval. No second LLM call, no state drift.
+**GAP → DL-06:** Approvals live in memory. Server restart = queue gone. Jenny can't trust pending decisions to survive.
 
 ---
 
