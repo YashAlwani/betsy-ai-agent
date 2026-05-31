@@ -14,6 +14,7 @@ class AppState:
         self._base: dict = {}
         self._current: dict = {}
         self.agent_log: list = []
+        self.approvals: list = []
         self.active_scenario: str = "normal"
         self.load()
 
@@ -31,6 +32,7 @@ class AppState:
     def reset(self):
         self._current = deepcopy(self._base)
         self.agent_log = []
+        self.approvals = []
         self.active_scenario = "normal"
 
     def apply_scenario(self, name: str) -> dict:

@@ -464,6 +464,62 @@
   }
   .toast.show { transform: translateY(0); opacity: 1; }
 
+  /* ── DECISION LOG ── */
+  .log-section .section-header { margin-bottom: 10px; }
+  .log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .log-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 13px 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    box-shadow: var(--shadow);
+  }
+  .log-item-trigger {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 3px;
+  }
+  .log-item-decision {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .log-item-analysis {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+  .log-item-right { text-align: right; }
+  .log-item-conf { font-size: 12px; color: var(--ai); letter-spacing: 1px; }
+  .log-item-ts { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .log-decision-approved { color: var(--green); }
+  .log-decision-rejected { color: var(--red); }
+  .log-decision-pending  { color: var(--amber); }
+  .log-decision-auto     { color: var(--ai); }
+  .empty-log {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 640px) {
     .main { padding: 16px; }
@@ -521,6 +577,7 @@
     <button class="quick-chip" onclick="scrollTo('inv-section')">📦 Inventory</button>
     <button class="quick-chip" onclick="scrollTo('sup-section')">🏭 Suppliers</button>
     <button class="quick-chip" onclick="scrollTo('approval-section')">✋ Approvals</button>
+    <button class="quick-chip" onclick="scrollTo('log-section')">📋 Decision log</button>
     <button class="quick-chip" onclick="window.open('/', '_blank')">🔧 Environment</button>
   </div>
 
@@ -601,6 +658,20 @@
         <div class="empty-icon">✅</div>
         <div class="empty-msg">Nothing waiting for your approval right now.</div>
       </div>
+    </div>
+  </div>
+
+  <!-- DECISION LOG -->
+  <div class="log-section" id="log-section">
+    <div class="section-header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="section-title">Betsy's decisions</span>
+        <span class="ai-col-note">✦ Full reasoning log</span>
+      </div>
+      <button class="chip chip-ghost" style="font-size:11px;padding:4px 12px;" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log-list" id="log-list">
+      <div class="empty-log">No decisions yet — run a scenario to see Betsy's reasoning here.</div>
     </div>
   </div>
 
@@ -896,6 +967,50 @@
     }
   }
 
+  // ── Render: Decision Log ──────────────────────────────────────────────────────
+  const DECISION_LABELS = {
+    generate_po:      { label: '✓ Ordered',           cls: 'log-decision-auto' },
+    flag_duplicate:   { label: '⚠ Flagged duplicate', cls: 'log-decision-pending' },
+    flag_for_approval:{ label: '⚠ Sent for review',   cls: 'log-decision-pending' },
+    escalate:         { label: '↑ Escalated',          cls: 'log-decision-pending' },
+    human_approved:   { label: '✅ You approved',      cls: 'log-decision-approved' },
+    human_rejected:   { label: '❌ You declined',      cls: 'log-decision-rejected' },
+    no_action:        { label: '— No action',          cls: '' },
+  };
+
+  function renderLog(entries) {
+    const el = document.getElementById('log-list');
+    if (!entries || !entries.length) {
+      el.innerHTML = '<div class="empty-log">No decisions yet — run a scenario to see Betsy\'s reasoning here.</div>';
+      return;
+    }
+    el.innerHTML = [...entries].reverse().map(e => {
+      const lbl  = DECISION_LABELS[e.decision] || { label: e.decision, cls: '' };
+      const conf = typeof e.confidence === 'number' ? dots(e.confidence) : '';
+      return `<div class="log-item">
+        <div>
+          <div class="log-item-trigger">${(e.trigger || '').replace(/_/g, ' ')}</div>
+          <div class="log-item-decision ${lbl.cls}">${lbl.label}</div>
+          ${e.analysis ? `<div class="log-item-analysis">${e.analysis}</div>` : ''}
+        </div>
+        <div class="log-item-right">
+          ${conf ? `<div class="log-item-conf">${conf}</div>` : ''}
+          <div class="log-item-ts">${timeAgo(e.timestamp)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function clearLog() {
+    try {
+      await fetch('/api/agent-log', { method: 'DELETE' });
+      await refresh();
+      toast('Decision log cleared.');
+    } catch {
+      toast('Could not clear log — is the server running?');
+    }
+  }
+
   // ── Scenario + Run controls ───────────────────────────────────────────────────
   let selectedScenario = '';
 
@@ -1007,6 +1122,7 @@
       renderInventory(inventory, agentLog);
       renderSuppliers(suppliers, agentLog);
       renderApprovals(approvals);
+      renderLog(agentLog);
 
       const dot  = document.getElementById('status-dot');
       const text = document.getElementById('status-text');

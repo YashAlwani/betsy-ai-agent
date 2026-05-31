@@ -72,6 +72,20 @@ def log_decision(trigger: str, analysis: str, decision: str,
         return {"logged": False}
 
 
+def _post_purchase_order(payload: dict) -> dict:
+    r = httpx.post(f"{API_BASE}/api/purchase-orders", json=payload, timeout=5.0)
+    r.raise_for_status()
+    return r.json()
+
+
+def queue_approval(item: dict) -> dict:
+    try:
+        r = httpx.post(f"{API_BASE}/api/approvals", json=item, timeout=5.0)
+        return r.json()
+    except Exception:
+        return {"queued": False}
+
+
 def is_server_up() -> bool:
     try:
         httpx.get(f"{API_BASE}/", timeout=2.0)

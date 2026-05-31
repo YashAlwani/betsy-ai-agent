@@ -25,6 +25,39 @@ def node(state: PipelineState) -> dict:
         return {"errors": [f"act: {exc}"], "actions": []}
 
 
+def _queue_for_approval(decision: dict) -> None:
+    import uuid
+    from datetime import datetime
+    item = decision.get("item", {})
+    condition = item.get("condition", {})
+    best = item.get("best_supplier") or {}
+    sku_id = condition.get("sku_id", "")
+    payload = None
+    if decision["action"] == "generate_po":
+        payload = {
+            "supplier_id": best.get("supplier_id", "UNKNOWN"),
+            "sku_id": sku_id,
+            "quantity": decision.get("qty", 0),
+            "unit_price": decision.get("unit_price", 0),
+            "reason": decision.get("reasoning", "")[:200],
+            "requested_by": "betsy-pipeline",
+        }
+    api.queue_approval({
+        "decision_id": str(uuid.uuid4()),
+        "status": "pending",
+        "action": decision["action"],
+        "sku_id": sku_id,
+        "supplier_id": best.get("supplier_id", ""),
+        "po_total": decision.get("po_total", 0),
+        "qty": decision.get("qty", 0),
+        "unit_price": decision.get("unit_price", 0),
+        "confidence": decision.get("confidence", 0.5),
+        "reasoning": decision.get("reasoning", ""),
+        "created_at": datetime.now().isoformat(),
+        "payload": payload,
+    })
+
+
 def _execute(decision: dict) -> dict:
     action = decision["action"]
     item = decision.get("item", {})
@@ -33,11 +66,12 @@ def _execute(decision: dict) -> dict:
     sku_id = condition.get("sku_id", "N/A")
 
     if not decision.get("auto_approved", False):
+        _queue_for_approval(decision)
         return {
             "action": action,
             "status": "pending_human_review",
             "executed": False,
-            "note": "Awaiting human approval",
+            "note": "Queued to /api/approvals",
         }
 
     if action == "generate_po":
