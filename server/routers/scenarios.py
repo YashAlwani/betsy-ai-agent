@@ -14,7 +14,7 @@ def list_scenarios():
 
 
 @router.post("/{name}")
-def inject_scenario(name: str):
+def inject_scenario(name: str, preserve_scores: bool = False):
     if name == "reset":
         state.reset()
         return {"status": "reset", "active_scenario": "normal", "message": "State reset to base data"}
@@ -23,7 +23,7 @@ def inject_scenario(name: str):
             status_code=404,
             detail=f"Unknown scenario '{name}'. Valid options: {['reset'] + VALID_SCENARIOS}",
         )
-    scenario = state.apply_scenario(name)
+    scenario = state.apply_scenario(name, preserve_scores=preserve_scores)
     return {
         "status": "injected",
         "active_scenario": name,

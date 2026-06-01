@@ -18,6 +18,17 @@ def get_supplier(supplier_id: str):
     raise HTTPException(status_code=404, detail=f"Supplier {supplier_id} not found")
 
 
+@router.patch("/{supplier_id}/score")
+def update_supplier_score(supplier_id: str, reliability_score: float):
+    for sup in state.suppliers:
+        if sup["supplier_id"] == supplier_id:
+            old = sup["reliability_score"]
+            sup["reliability_score"] = round(max(0.0, min(1.0, reliability_score)), 4)
+            return {"supplier_id": supplier_id, "name": sup["name"],
+                    "old_score": old, "new_score": sup["reliability_score"]}
+    raise HTTPException(status_code=404, detail=f"Supplier {supplier_id} not found")
+
+
 @router.get("/{supplier_id}/quote")
 def get_quote(
     supplier_id: str,
