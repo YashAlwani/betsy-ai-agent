@@ -520,10 +520,41 @@
     font-size: 13px;
   }
 
+  /* ── STATS PANEL ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .stat-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .stat-value.ai  { color: var(--ai); }
+  .stat-value.good { color: var(--green); }
+  .stat-value.warn { color: var(--amber); }
+  .stat-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 640px) {
     .main { padding: 16px; }
     .cmd-bar { max-width: 100%; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -569,6 +600,30 @@
       Connecting to the procurement environment...
     </div>
     <div class="narrative-actions" id="narrative-actions"></div>
+  </div>
+
+  <!-- STATS PANEL -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card">
+      <div class="stat-value" id="stat-decisions">—</div>
+      <div class="stat-label">Decisions made</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value ai" id="stat-auto-rate">—</div>
+      <div class="stat-label">Autonomous rate</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value warn" id="stat-pending">—</div>
+      <div class="stat-label">Awaiting your OK</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-queue-value">—</div>
+      <div class="stat-label">Value in queue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value ai" id="stat-next-run">—</div>
+      <div class="stat-label">Next auto-run</div>
+    </div>
   </div>
 
   <!-- QUICK ACTIONS -->
@@ -1102,17 +1157,29 @@
     }
   });
 
+  // ── Render: Stats panel ───────────────────────────────────────────────────────
+  function renderStats(s) {
+    if (!s) return;
+    document.getElementById('stat-decisions').textContent  = s.decisions_total ?? '—';
+    document.getElementById('stat-auto-rate').textContent  =
+      s.decisions_total ? s.auto_rate_pct + '%' : '—';
+    document.getElementById('stat-pending').textContent    = s.pending_approvals ?? '—';
+    document.getElementById('stat-queue-value').textContent =
+      s.queue_value_eur > 0 ? '€' + s.queue_value_eur.toLocaleString() : '€0';
+    document.getElementById('stat-next-run').textContent   =
+      s.next_run ? timeAgo(s.next_run) : (s.scheduler_active ? 'scheduled' : '—');
+  }
+
   // ── Main refresh ──────────────────────────────────────────────────────────────
   async function refresh() {
     try {
-      const [inventory, suppliers, agentLog] = await Promise.all([
+      const [inventory, suppliers, agentLog, approvals, statsData] = await Promise.all([
         get('/api/inventory'),
         get('/api/suppliers'),
         get('/api/agent-log'),
+        get('/api/approvals').catch(() => []),
+        get('/api/stats').catch(() => null),
       ]);
-
-      let approvals = [];
-      try { approvals = await get('/api/approvals'); } catch { /* endpoint not yet built */ }
 
       const narrative = buildNarrative(inventory, agentLog, approvals);
       document.getElementById('narrative-text').textContent = narrative;
@@ -1123,6 +1190,7 @@
       renderSuppliers(suppliers, agentLog);
       renderApprovals(approvals);
       renderLog(agentLog);
+      renderStats(statsData);
 
       const dot  = document.getElementById('status-dot');
       const text = document.getElementById('status-text');

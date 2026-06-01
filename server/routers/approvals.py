@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 
+from server import db
 from server.state import state
 
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
@@ -22,6 +23,7 @@ def queue_approval(item: dict):
     if "created_at" not in item:
         item["created_at"] = datetime.now().isoformat()
     state.approvals.append(item)
+    db.save_approval(item)
     return item
 
 
@@ -35,6 +37,7 @@ def approve(decision_id: str):
 
     appr["status"] = "approved"
     appr["resolved_at"] = datetime.now().isoformat()
+    db.update_approval(decision_id, "approved", appr["resolved_at"])
 
     result = {}
     if appr["action"] == "generate_po" and appr.get("payload"):
@@ -67,14 +70,16 @@ def approve(decision_id: str):
             state.purchase_orders.append(order)
             result = {"po_id": po_id}
 
-    state.agent_log.append({
+    log_entry = {
         "timestamp": datetime.now().isoformat(),
         "trigger": appr.get("sku_id", "approval"),
         "analysis": f"Human approved {appr['action']} — decision {decision_id[:8]}",
         "decision": "human_approved",
         "confidence": appr.get("confidence", 1.0),
         "metadata": {"decision_id": decision_id, "action": appr["action"], **result},
-    })
+    }
+    state.agent_log.append(log_entry)
+    db.save_log_entry(log_entry)
 
     return {"status": "approved", **result}
 
@@ -89,14 +94,17 @@ def reject(decision_id: str):
 
     appr["status"] = "rejected"
     appr["resolved_at"] = datetime.now().isoformat()
+    db.update_approval(decision_id, "rejected", appr["resolved_at"])
 
-    state.agent_log.append({
+    log_entry = {
         "timestamp": datetime.now().isoformat(),
         "trigger": appr.get("sku_id", "approval"),
         "analysis": f"Human declined {appr['action']} — decision {decision_id[:8]}",
         "decision": "human_rejected",
         "confidence": 1.0,
         "metadata": {"decision_id": decision_id, "action": appr["action"]},
-    })
+    }
+    state.agent_log.append(log_entry)
+    db.save_log_entry(log_entry)
 
     return {"status": "rejected"}

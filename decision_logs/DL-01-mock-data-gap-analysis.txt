@@ -1,6 +1,6 @@
-Decision Log Entry #1
+DL-01 — What Betsy Needs to Test Against: Building the Mock Environment
+Betsy Autonomous Procurement Agent
 
----
 
 0. Context
 
@@ -12,30 +12,32 @@ I kept saying "I'm building an autonomous procurement agent" but couldn't pictur
 Where this fits:
 Phase 1 (Architecture & Research). The GAP found here is what forces DL-02 to exist.
 
----
 
-1. My research question
+1. Research question
+
 What environment do I need to observe, test, and validate autonomous procurement decisions reliably?
 
----
 
 2. Current LO stage
-[x] Analyzing → [x] Advising → [x] Designing → [x] Realizing → [x] Managing
 
----
+[x] Analyzing — surveyed procurement failure modes, identified what data structures are required
+[x] Advising — recommended building the test environment before touching agent code
+[x] Designing — schema design for SKU fields, supplier tradeoffs, 4 injectable scenarios
+[x] Realizing — built datasets, REST server, dashboard, and the scenario injection mechanism
+[x] Managing — validated all 4 scenarios produce reproducible, resettable, non-bleeding results
 
-3. What makes a good decision here?
+
+3. What makes a good decision here
 
 - Covers all 4 core procurement failure modes — if the environment can't produce all of them, I can't test the full decision space
 - Data realistic enough to create genuine tradeoffs — not so obvious the agent always has one clear answer
 - Fully resettable per scenario, so runs are reproducible and don't bleed into each other
 
----
 
 4. What I decided
+
 Build the environment first, agent second — mock datasets, a REST server, 4 injectable scenarios, and a live dashboard. All before writing a single agent node.
 
----
 
 5. Why this decision
 
@@ -47,12 +49,7 @@ Once the base data was in, I wired up the dashboard and looked at it live. I cou
 
 [IMAGE: gap-dashboard-empty-log.png — Dashboard showing Inventory Health tab with SKU-003 critical, Agent Log tab empty. The data exists, nothing acts on it.]
 
-That gap pushed me to design the scenarios around failure modes, not the happy path. The stockout scenario was straightforward — drop current_stock to 45, push reorder_point to 200, and the math is undeniable:
-
-    "expected_agent_action": "generate_po",
-    "expected_supplier": "QuickShip Express"
-
-(@stockout_warning.json:13-14)
+That gap pushed me to design the scenarios around failure modes, not the happy path. The stockout scenario was straightforward — drop current_stock to 45, push reorder_point to 200, and the math is undeniable. The expected outcome is baked into the scenario file itself: QuickShip Express, generate PO — so any agent run is immediately checkable against a known answer (@stockout_warning.json).
 
 The duplicate invoice scenario was harder. It needed to be genuinely ambiguous — INV-2024-099 matches SUP-006 at exactly $1,470.00, same as two invoices already in the system. Fraud, or just a billing system that double-fired? That question forced me to realize early that this case would need LLM reasoning, not just rule matching (@duplicate_invoice.json). Stockout is math. Price spike is comparison. Duplicate invoice is judgment — three completely different cognitive operations, all living in the same environment.
 
@@ -66,9 +63,8 @@ If I were advising a PM or operations lead on rolling out procurement automation
 GAP found:
 After all of this, the dashboard still just sits there. It shows the problem — SKU-003 critical, QuickShip Express available at 1-day lead. But nothing connects those two facts. No PO. No alert. A complete picture of a solvable problem with zero response. That gap is what DL-02 has to answer.
 
----
 
-6. Does this hold up?
+6. Does this hold up
 
 - Covers all 4 failure modes: ✅ — all injectable, all have expected_agent_action for validation
 - Non-trivial decisions: ✅ — supplier tradeoffs are real, duplicate invoice is genuinely ambiguous
@@ -80,7 +76,6 @@ Assumptions I'm making:
 What surprised me:
 The asymmetry between failure modes wasn't obvious until I tried writing the expected_reasoning_contains fields for each scenario — and realized stockout, price spike, and duplicate invoice point at completely different cognitive operations. That asymmetry later drove the architecture decision in DL-02 directly.
 
----
 
 7. What this unlocks
 
@@ -95,7 +90,6 @@ This isn't just test infrastructure. In a real deployment, you'd run these same 
 How I'll know this worked:
 When the agent (DL-02+) logs a decision after the stockout run — trigger: stockout_risk, decision: generate_po, supplier: QuickShip Express. That's the moment the gap closes.
 
----
 
-@inventory.json · @suppliers.json · @stockout_warning.json · @duplicate_invoice.json · @state.py · @app.py
-@LO1: Analyzing · @LO2: Advising · @LO3: Designing · @LO4: Realizing · @LO5: Managing
+*@inventory.json · @suppliers.json · @stockout_warning.json · @duplicate_invoice.json · @state.py · @app.py*
+*@LO1: Analyzing · @LO2: Advising · @LO3: Designing · @LO4: Realizing · @LO5: Managing*

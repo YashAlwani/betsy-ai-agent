@@ -35,3 +35,8 @@ htmlcov/
 
 # Logs
 *.log
+
+# Large media files
+*.mp4
+*.mov
+betsy.db

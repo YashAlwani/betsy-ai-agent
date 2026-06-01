@@ -39,33 +39,7 @@ Method: Lab
 
 The implementation question was where to put the execution logic when a human approves. Two options: re-run the pipeline from the saved decision, or store the PO payload at queue time and execute it when approved. Re-running the pipeline would mean another LLM call and another 30-second wait just to place an order the agent already decided on. Storing the payload at queue time is simpler and more predictable — the PO is pre-built, the approve endpoint just pulls the trigger.
 
-@pipeline/nodes/act.py builds the full PO payload the moment a decision is made and passes it to the queue:
-
-```python
-payload = {
-    "supplier_id": best.get("supplier_id", "UNKNOWN"),
-    "sku_id": sku_id,
-    "quantity": decision.get("qty", 0),
-    "unit_price": decision.get("unit_price", 0),
-    "reason": decision.get("reasoning", "")[:200],
-    "requested_by": "betsy-pipeline",
-}
-api.queue_approval({
-    "decision_id": str(uuid.uuid4()),
-    "status": "pending",
-    "action": decision["action"],
-    "payload": payload,
-    ...
-})
-```
-
-The approve endpoint in @server/routers/approvals.py picks that payload up, creates the PO directly in state, and logs the human decision:
-
-```python
-@router.post("/{decision_id}/approve")
-def approve(decision_id: str):
-    # creates PO in state, logs human_approved, returns po_id
-```
+@pipeline/nodes/act.py builds the complete PO payload the moment a decision is made — supplier, SKU, quantity, unit price, reasoning — and passes the whole thing to the approval queue. Nothing is recomputed later. The approve endpoint in @server/routers/approvals.py picks that payload up, creates the PO directly in state, and logs the human decision.
 
 betsy.html needed zero changes — it was already calling GET /api/approvals, POST /api/approvals/{id}/approve, and POST /api/approvals/{id}/reject. The frontend was waiting for the backend.
 
@@ -83,21 +57,7 @@ T9  Re-approve resolved item              → 400                         ✅
 T10 Approve unknown id                    → 404                         ✅
 ```
 
-What surprised me: the test showed the queue was empty after a pipeline run even though the queuing code was correct. Traced it to @server/state.py:reset() — the method included self.approvals = [] because I added it when wiring up the reset flow. The pipeline calls api.reset_scenario() at the end of every run, which calls state.reset(), which was wiping the approvals immediately after they were queued. Fix was removing that one line — approvals are user-facing decisions that live until Jenny acts on them, not part of the mock data that resets between scenarios.
-
-```python
-# before
-def reset(self):
-    self._current = deepcopy(self._base)
-    self.agent_log = []
-    self.approvals = []   # ← this was the bug
-
-# after
-def reset(self):
-    self._current = deepcopy(self._base)
-    self.agent_log = []
-    # approvals survive scenario resets
-```
+What surprised me: the test showed the queue was empty after a pipeline run even though the queuing code was correct. Traced it to @server/state.py:reset() — one line was wiping self.approvals at the end of every pipeline run, included when wiring up the reset flow. Approvals aren't mock data that resets between scenarios — they're user-facing decisions that live until Jenny acts on them. Removing that single line fixed it.
 
 ![betsy.html decision log section after approving — showing ✅ You approved (SKU-003) and ❌ You declined (SKU-004) entries with timestamps](./images/dl05-decision-log-after.png)
 
@@ -112,11 +72,9 @@ GAP: approvals live in memory. A server restart wipes the entire queue. If Jenny
 - Approve creates a real PO: ✅ — PO-20260531-0E74 created with requested_by: betsy-human-approved, visible in index.html orders tab in real time
 - Full audit trail: ✅ — every approval and rejection logs to /api/agent-log with decision_id and action. The decision log section in betsy.html shows human_approved and human_rejected in plain language
 
-Other things to consider:
-
 Pending approvals have no expiry. If a stockout approval sits pending for three days, the stock situation has probably changed — prices may have shifted, the supplier might have gone OOS. There's no mechanism to surface "this approval is stale." @pipeline/nodes/act.py doesn't store a created_at comparison against current data. Worth adding a staleness warning in a later pass.
 
-The queue_approval() call in act.py is a synchronous HTTP call back to the same server. It works because uvicorn handles concurrent requests, but it means the pipeline has a hard dependency on the server being up and reachable at localhost:8000. If the server isn't running and someone triggers the pipeline directly from the terminal, the approval silently fails with {"queued": False} and the decision is lost. @shared/api_client.py:queue_approval() swallows the error. That's fine for now but worth hardening when persistence comes in.
+The queue_approval() call in act.py is a synchronous HTTP call back to the same server. It works because uvicorn handles concurrent requests, but it means the pipeline has a hard dependency on the server being up and reachable at localhost:8000. If the server isn't running and someone triggers the pipeline directly from the terminal, the approval silently fails and the decision is lost. @shared/api_client.py swallows the error. That's fine for now but worth hardening when persistence comes in.
 
 What I assumed: Jenny will act on approvals in the same session. This assumption breaks the moment she closes her laptop.
 

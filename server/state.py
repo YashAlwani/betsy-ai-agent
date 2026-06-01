@@ -17,6 +17,10 @@ class AppState:
         self.approvals: list = []
         self.active_scenario: str = "normal"
         self.load()
+        from server import db as _db
+        _db.init_db()
+        self.agent_log = _db.load_log_entries()
+        self.approvals = _db.load_all_approvals()
 
     def load(self):
         self._base = {
@@ -33,10 +37,20 @@ class AppState:
         self._current = deepcopy(self._base)
         self.agent_log = []
         self.active_scenario = "normal"
+        from server import db as _db
+        _db.clear_log()
 
-    def apply_scenario(self, name: str) -> dict:
+    def apply_scenario(self, name: str, preserve_scores: bool = False) -> dict:
         path = SCENARIOS / f"{name}.json"
         scenario = json.loads(path.read_text())
+
+        saved_scores = {}
+        if preserve_scores:
+            saved_scores = {
+                s["supplier_id"]: s["reliability_score"]
+                for s in self._current["suppliers"]
+            }
+
         self._current = deepcopy(self._base)
         self.agent_log = []
         self.active_scenario = name
@@ -64,6 +78,12 @@ class AppState:
                             break
             elif key == "invoices":
                 self._current["invoices"].extend(overrides)
+
+        if preserve_scores and saved_scores:
+            for supplier in self._current["suppliers"]:
+                sid = supplier["supplier_id"]
+                if sid in saved_scores:
+                    supplier["reliability_score"] = saved_scores[sid]
 
         return scenario
 
