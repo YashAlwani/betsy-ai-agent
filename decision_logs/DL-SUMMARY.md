@@ -56,12 +56,23 @@ Built /api/approvals — GET pending, POST approve/reject. act.py queues every r
 
 ---
 
-## DL-06 — Persistence and learning
-`DL-06-persistence-learning.txt` ← *not written yet*
+## DL-06 — Making memory permanent
+`DL-06-persistence-learning.txt`
 
-Right now every decision resets on server restart. Supplier scores never change. How does Betsy get smarter — scores updating after deliveries, price trends tracked in SQLite, the scheduler running autonomously without a terminal command.
+Three gaps closed in one sprint: SQLite persistence (agent_log + approvals survive server restarts), EMA supplier scoring (on-time delivery raises reliability score, late delivery lowers it, formula α=0.2), and APScheduler (pipeline fires automatically every 30 minutes, next_run visible in betsy.html stats panel). Restart test confirmed zero data loss. Formula confirmed to four decimal places against known values.
 
-**Status:** TODO
+**Decision:** SQLite via built-in sqlite3, BackgroundScheduler in a scheduler_instance.py singleton (avoids circular import with stats.py), EMA triggered on PATCH .../delivered with alpha=0.2.
+**GAP → DL-07:** Scores update correctly in isolation. But does a better score actually change what Betsy orders?
+
+---
+
+## DL-07 — Does Betsy actually get smarter?
+`DL-07-long-term-learning.txt`
+
+The EMA formula is correct — DL-06 proved that. This DL proves the consequence: that delivery history changes real procurement decisions, not just numbers. Built test_long_term_learning.py — two real LLM pipeline runs, 8 delivery rounds between them. QuickShip gets 5 × 8d-late (0.92 → 0.44), FastParts gets 3 × on-time (0.95 → 0.97). Composite crossover at round 5. Score trajectory confirmed exactly. Full before/after pipeline comparison in progress.
+
+**Decision:** Build an integration test with two real LLM calls and a structured delivery schedule that produces a mathematically predictable composite crossover.
+**Status:** Score evidence solid ✅ — behavioral comparison (pipeline run 1 vs run 2 supplier choice) in progress 🟡
 
 ---
 

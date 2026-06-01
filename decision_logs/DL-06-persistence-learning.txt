@@ -1,0 +1,194 @@
+DL-06 — Making Memory Permanent: Persistence, Active Learning, and Autonomous Scheduling
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+DL-05 closed with a working HITL loop — approval cards appeared in betsy.html, Jenny clicked Approve, a real PO materialised in the procurement environment in real time. That was the moment the loop closed. But every component in that loop lived in RAM. Close the laptop, restart the server, and the queue is gone. Not just the approvals — the entire agent log, every decision Betsy had ever made, all of it.
+
+Beyond the memory problem, two other gaps had been sitting unaddressed since DL-02:
+
+Supplier scores are static. @mock_data/suppliers.json gives every supplier a fixed reliability_score. PrecisionParts GmbH is 0.97 — permanently. It doesn't matter if they deliver late three weeks in a row. The score never moves. Betsy can't distinguish a supplier with a good reputation from one that's actually performing well right now.
+
+Betsy still has to be triggered manually. Every procurement check requires someone to open betsy.html and click Run, or type a terminal command. A real procurement system monitors inventory continuously — not only when a person remembers to look.
+
+Three gaps stacked on each other. None was blocking the previous DLs, but all three had to close before Betsy could be described as a real system rather than a demo that resets on every run.
+
+
+1. Research question
+
+How do I make Betsy's state survive restarts, update supplier trust scores from real delivery outcomes, and run the pipeline autonomously on a schedule — without adding deployment complexity that makes the project harder to run than it is to understand?
+
+
+2. Current LO stage
+
+[ ] Analyzing
+[ ] Advising
+[x] Designing — persistence architecture, EMA learning formula, circular import solution
+[x] Realizing — built SQLite persistence, EMA score updates, APScheduler, stats endpoint
+[x] Managing — restart verification, formula validation against known values, scheduler health visible in betsy.html
+
+
+3. What makes a good decision here
+
+- Agent log and pending approvals must survive a server restart with zero entries lost
+- EMA formula must be verifiable: given a known baseline score and a known delivery lateness, the output must match the formula to four decimal places
+- Scheduler must be active and showing next_run_time within 30 seconds of server start, visible in the UI without touching code
+- Stats endpoint must surface all five metrics correctly: total decisions, autonomous rate, queue depth, queue value in euros, and next scheduled run
+
+
+4. What I decided
+
+Four pieces built as a single sprint: SQLite persistence via a new @server/db.py module using Python's built-in sqlite3 (no new dependencies beyond APScheduler), EMA score updates triggered on PO delivery with alpha=0.2, APScheduler BackgroundScheduler running inside a FastAPI lifespan context, and a @server/scheduler_instance.py singleton to solve the circular import problem that arises when stats.py needs to read scheduler state. Stats endpoint and betsy.html panel added on top of all four.
+
+
+5. Why this decision
+
+Method: Lab + Designing
+
+Persistence — why SQLite:
+
+The project is school-scope. Adding PostgreSQL or MongoDB means a separate service, connection pooling, environment variables, and an extra setup step in the README before anything runs. SQLite is built into Python — no installation, no config, one betsy.db file at the project root that appears the first time the server starts. The tradeoff is no concurrent writes from multiple server processes, which doesn't apply here: there's one uvicorn worker, one AppState object.
+
+All writes go through a threading.Lock() in @server/db.py. The pipeline runs in a background thread (via APScheduler or BackgroundTasks), while approval actions arrive from HTTP requests — both paths can write simultaneously. The lock prevents corruption without the overhead of connection pooling:
+
+```python
+_lock = threading.Lock()
+
+def save_log_entry(entry: dict) -> None:
+    with _lock:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "INSERT INTO agent_log (timestamp, trigger, analysis, decision, confidence, metadata) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (entry["timestamp"], entry["trigger"], ...)
+        )
+        conn.commit()
+        conn.close()
+```
+
+On server start, @server/state.py:__init__ calls db.init_db() then loads both tables back into memory:
+
+```python
+_db.init_db()
+self.agent_log = _db.load_log_entries()
+self.approvals  = _db.load_all_approvals()
+```
+
+The restart test confirmed it: 7 log entries and 1 pending approval reloaded from betsy.db after a hard server kill and fresh start — zero entries lost (@docs/test-report-dl06.md, T4).
+
+EMA learning — why alpha=0.2:
+
+The formula is a standard exponential moving average applied to delivery performance:
+
+    new_score  = 0.2 × performance + 0.8 × old_score
+    performance = max(0.0, 1.0 − lateness_days × 0.1)
+
+Alpha of 0.2 means any single delivery counts 20% and history counts 80%. It's moderately aggressive — a supplier with a 0.97 baseline who delivers 5 days late drops to 0.88 in one event. Ten consecutive deliveries each 10 or more days late would bring any supplier to zero. That's the right sensitivity: reputation takes time to build, but it can erode fast when it needs to.
+
+The update fires in @server/routers/orders.py the moment a PO is patched to "delivered":
+
+```python
+@router.patch("/{po_id}/status")
+def update_order_status(po_id: str, status: str, actual_delivery: str = None):
+    for order in state.purchase_orders:
+        if order["po_id"] == po_id:
+            order["status"] = status
+            if status == "delivered":
+                order["actual_delivery"] = actual_delivery or datetime.now().isoformat()
+                _apply_ema(order)
+            return order
+```
+
+Formula verification from @docs/test-report-dl06.md, using PrecisionParts GmbH (SUP-004) at baseline 0.97:
+
+| Event             | Lateness | Performance | Formula                    | Before | After  |
+|-------------------|----------|-------------|----------------------------|--------|--------|
+| On-time delivery  | 0 days   | 1.0         | 0.2×1.0 + 0.8×0.9700      | 0.9700 | 0.9760 |
+| 5-day late        | 5 days   | 0.5         | 0.2×0.5 + 0.8×0.9760      | 0.9760 | 0.8808 |
+
+Both match exactly. The score change is visible immediately in GET /api/suppliers and in the ✦ Betsy Score column in betsy.html.
+
+Known limitation: supplier scores are session-persistent. state.reset() — which the pipeline calls at the end of every scenario run — reloads supplier data from mock_data/suppliers.json, returning scores to their baseline values. That's by design: scenario testing needs reproducible starting conditions. Score persistence to the database is a future step. What this DL proves is that the learning mechanism is correct. Whether those changes survive a full scenario cycle is what DL-07 tests.
+
+APScheduler — why BackgroundScheduler and not AsyncIOScheduler:
+
+The pipeline is synchronous. graph.invoke() runs all six nodes sequentially and takes 30–60 seconds with LLM calls. Running a synchronous blocking function inside AsyncIOScheduler would freeze FastAPI's event loop for the duration of every run — no API requests could be processed while the pipeline was running. BackgroundScheduler puts each job in a separate thread from uvicorn's thread pool, so the event loop stays free:
+
+```python
+# server/scheduler_instance.py — the entire file
+from apscheduler.schedulers.background import BackgroundScheduler
+scheduler = BackgroundScheduler()
+```
+
+The scheduler lives in its own module — not in main.py — because @server/routers/stats.py needs to read job.next_run_time to populate the stats endpoint. If scheduler were imported from main.py inside stats.py, Python would hit a circular import at startup. The singleton module breaks the cycle cleanly:
+
+```python
+# server/main.py — lifespan context
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    interval = int(os.getenv("AGENT_INTERVAL_MINUTES", "30"))
+    scheduler.add_job(_scheduled_run, "interval", minutes=interval,
+                      id="betsy_auto_run", replace_existing=True)
+    scheduler.start()
+    yield
+    scheduler.shutdown(wait=False)
+```
+
+Default interval is 30 minutes. Set AGENT_INTERVAL_MINUTES=1 for testing — the pipeline fires within 60 seconds and the next_run card in betsy.html updates immediately.
+
+Stats panel:
+
+GET /api/stats computes everything from state and the scheduler at query time:
+
+```json
+{
+  "decisions_total":   9,
+  "decisions_auto":    0,
+  "auto_rate_pct":     0.0,
+  "pending_approvals": 1,
+  "queue_value_eur":   5500.0,
+  "scheduler_active":  true,
+  "next_run":          "2026-05-31T18:44:57..."
+}
+```
+
+betsy.html shows five stat cards above the approvals section — decisions made, autonomous rate, awaiting your OK, value in queue, next auto-run — all updating on the existing 5-second poll.
+
+![betsy.html stats panel — five metric cards: 9 decisions made, 0.0% autonomous rate, 1 awaiting OK, €5,500 in queue, next auto-run timestamp visible](./images/dl06-stats-panel.png)
+
+[video: Recording 2026-05-31 215707.mp4 — betsy.html showing live stats panel with scheduler_active: true and the next_run countdown updating in real time]
+
+What I'd recommend: for any AI system that needs to be trusted by a non-technical user, persistence is not a nice-to-have — it's the trust layer. Jenny can't act on a pending $11k PO if she's not sure it'll still be there after the weekend. A write-through SQLite pattern — append on action, reload on boot — is the right first persistence layer for a project at this scale. The same pattern scales to PostgreSQL later with only the connection logic changing; the application code stays identical.
+
+Full test results at @docs/test-report-dl06.md: 9 of 9 passed, including the restart verification (T4) and both EMA formula checks (T5a and T5b).
+
+
+6. Does this hold up
+
+- Zero data lost on restart: ✅ — 7 log entries and 1 pending approval reloaded from betsy.db after hard server kill. T4 in @docs/test-report-dl06.md
+- EMA formula verifiable: ✅ — PrecisionParts GmbH 0.97 baseline → 0.9760 on-time → 0.8808 after 5-day late. Both match formula exactly, confirmed by @tests/test_ema_learning.py
+- Scheduler active on boot: ✅ — scheduler_active: true in /api/stats within seconds of server start, next_run populated
+- Stats endpoint correct shape: ✅ — all fields present and matching expected values after full test sequence. T6 in @docs/test-report-dl06.md
+
+What I assumed: SQLite is appropriate for this project's concurrency model. That assumption holds — one server process, writes are infrequent, and the threading lock is never a bottleneck.
+
+What surprised me: the circular import. APScheduler belongs in main.py conceptually — that's where the application lifecycle lives. But stats.py legitimately needs the scheduler object to read next_run_time, which means importing from main.py in stats.py, which creates an import loop on startup. The fix — a three-line singleton module — is the correct pattern but it's a non-obvious structural decision. It's worth naming explicitly because it's the kind of thing that slows down a real-world project if you don't anticipate it.
+
+
+7. What this unlocks
+
+Next LO stage: Managing — validating that score changes have real downstream effects on procurement decisions, not just that numbers update correctly (DL-07)
+
+What I can now do:
+- Start the server, leave it running, and Betsy will scan inventory and queue approvals every 30 minutes without any terminal interaction
+- Simulate a delivery via PATCH /api/purchase-orders/{id}/status?status=delivered and watch the supplier's reliability score update immediately in betsy.html's Betsy Score column
+- Restart the server and open betsy.html — the approval queue and agent log are exactly where they were before the restart. Jenny can close her laptop
+
+Ongoing monitoring: the stats panel is the health check. scheduler_active: true means the scheduler is alive. next_run advancing means jobs are firing. If queue_value_eur grows without decisions_human increasing, approvals are accumulating unresolved — that's the signal to check betsy.html and clear the queue. auto_rate_pct at 0% on this configuration is correct: all test scenarios involve high-value POs that exceed the $5,000 autonomous spending limit and correctly escalate.
+
+How I'll know this worked: start the server cold, check /api/stats, confirm scheduler_active: true and next_run is set. Kill the server, restart it, open betsy.html — the approval queue and agent log should be identical to what they were before the restart. That continuity is the evidence that memory is no longer fragile.
+
+
+*@server/db.py · @server/scheduler_instance.py · @server/routers/stats.py · @server/state.py · @server/main.py · @server/routers/orders.py · @tests/test_ema_learning.py · @docs/test-report-dl06.md*
+*@LO3: Designing · @LO4: Realizing · @LO5: Managing*
