@@ -37,43 +37,17 @@ Wire betsy.html to the live FastAPI endpoints with a 5-second auto-refresh, add 
 
 Method: Lab + Field
 
-The implementation started with the architecture question: how does betsy.html talk to the server? The answer was already in the codebase — @dashboard/index.html uses plain fetch() calls against the FastAPI endpoints, no framework, no build step. betsy.html follows the same pattern. @docs/api-control-layer.md maps out the full picture: both surfaces (betsy.html and index.html) share the same API, so any action Betsy takes autonomously — posting a PO, logging a decision — shows up in both views immediately.
+The implementation started with the architecture question: how does betsy.html talk to the server? The answer was already in the codebase — @dashboard/index.html uses plain fetch() calls against the FastAPI endpoints, no framework, no build step. betsy.html follows the same pattern. A Promise.all pulls inventory, suppliers, and agent log in a single shot — same origin, no CORS issues (@dashboard/betsy.html). @docs/api-control-layer.md maps out the full picture: both surfaces share the same API, so any action Betsy takes autonomously shows up in both views immediately.
 
-```javascript
-// betsy.html — same origin, no CORS issues
-const [inventory, suppliers, agentLog] = await Promise.all([
-  get('/api/inventory'),
-  get('/api/suppliers'),
-  get('/api/agent-log'),
-]);
-```
-
-The AI narrative generates client-side from that data — no LLM call needed for the summary. If stock is below reorder point and the agent log has a recent generate_po entry for that SKU, the narrative writes: "Steel Bolts were running low — I ordered more automatically." @dashboard/betsy.html:buildNarrative() handles this in about 20 lines of plain JavaScript.
+The AI narrative generates client-side from that data — no LLM call needed for the summary. If stock is below reorder point and the agent log has a recent generate_po entry for that SKU, the narrative writes itself: "Steel Bolts were running low — I ordered more automatically." About 20 lines of plain JavaScript in @dashboard/betsy.html.
 
 ![betsy.html open in browser showing the live AI narrative, ✦ Risk column in inventory table, and ✦ Betsy Score column in supplier table — all pulling from the live API](./images/dl04-betsy-live-data.png)
 
-The run trigger was the missing piece. Before this sprint, you could only run the agent from a terminal. I added POST /api/run-agent to @server/main.py:
-
-```python
-@app.post("/api/run-agent")
-def run_agent(background_tasks: BackgroundTasks, scenario: str = "", mode: str = "pipeline"):
-    def _run():
-        from pipeline.run import run_full
-        run_full(scenario=scenario or None)
-    background_tasks.add_task(_run)
-    return {"status": "started"}
-```
-
-It returns immediately and runs the agent in a background thread — so the browser doesn't hang waiting for a 30-second LLM call. The scenario chips in betsy.html POST to this endpoint, then the 5-second auto-refresh picks up the results.
+The run trigger was the missing piece. Before this sprint, you could only run the agent from a terminal. POST /api/run-agent hands the pipeline off to FastAPI's background task mechanism — it returns immediately so the browser doesn't hang waiting for a 30-second LLM call, and the 5-second auto-refresh picks up the results. The scenario chips in betsy.html POST to this endpoint (@server/main.py).
 
 ![betsy.html scenario chip row — stockout_warning selected (highlighted), Run Betsy button with spinner, status showing "Agent running — updating in ~10s..."](./images/dl04-run-betsy-controls.png)
 
-Model selection: the project was using Mistral 7B by default, inherited from initial setup. The decision to switch came from one clear observation — Mistral 7B was inconsistent with structured JSON output, which is exactly what the decide and evaluate nodes rely on. @shared/llm.py:call_json() already handles malformed JSON with a fallback, but hitting fallback every few calls means the agent is running on rule-based logic instead of LLM reasoning. Llama 3.1 8B is better at instruction following and JSON schema adherence for its size class. After deleting Mistral and the unused llava and older llama3 models (freed ~14GB), Llama 3.1 8B is the only active model:
-
-```python
-# shared/llm.py
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
-```
+Model selection: the project was using Mistral 7B by default, inherited from initial setup. The decision to switch came from one clear observation — Mistral 7B was inconsistent with structured JSON output, which is exactly what the decide and evaluate nodes rely on. @shared/llm.py already handles malformed JSON with a fallback, but hitting fallback every few calls means the agent is running on rule-based logic instead of LLM reasoning. Llama 3.1 8B is better at instruction following and JSON schema adherence for its size class. After deleting Mistral and the unused older models (freed ~14GB), Llama 3.1 8B is the only active model — configurable via environment variable, defaulting to llama3.1:8b (@shared/llm.py).
 
 The Lab phase was running the actual scenario. First run with stockout_warning:
 
@@ -81,14 +55,7 @@ The Lab phase was running the actual scenario. First run with stockout_warning:
 
 The agent ran. It detected two conditions correctly — a duplicate invoice on SKU-004 and a stockout on SKU-003. It decided on both. But both actions came back as pending_human_review. The bot did nothing autonomously.
 
-This felt like a failure. It wasn't. Digging into @pipeline/nodes/decide.py:116-117:
-
-```python
-if po_total > MAX_AUTO_USD:
-    requires_human = True  # financial safeguard cannot be overridden
-```
-
-The stockout_warning scenario orders max_stock - current_stock = 955 units of SKU-003 at $12.50 each — a $11,937 PO. The $5,000 autonomous spending limit correctly blocked it. The safeguard is working exactly as designed. This is the behaviour that would prevent Betsy from accidentally ordering $50,000 of the wrong thing at 3am.
+This felt like a failure. It wasn't. The stockout_warning scenario orders max_stock − current_stock = 955 units of SKU-003 at $12.50 each — a $11,937 PO. The financial safeguard in the decide node checks PO total against the $5,000 autonomous spending limit and flips requires_human to True if it's exceeded — and that flag cannot be overridden by LLM reasoning (@pipeline/nodes/decide.py). The safeguard is working exactly as designed. This is the behaviour that would prevent Betsy from accidentally ordering $50,000 of the wrong thing at 3am.
 
 The deeper finding: "the bot did nothing" is the right outcome for a high-value order. Autonomous doesn't mean unconditional — it means acting without human involvement when it's safe to do so, and escalating when it isn't. The boundary between the two is the $5,000 limit, the duplicate invoice rule, and the price spike threshold. All three held up under the first real test.
 

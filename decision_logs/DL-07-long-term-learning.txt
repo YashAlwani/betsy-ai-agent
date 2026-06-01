@@ -41,11 +41,8 @@ Method: Lab
 
 The test design was deliberate, not random. The delivery schedule was engineered to produce a clean, explainable reversal — the kind where the math is visible at every step and the conclusion is unambiguous.
 
-The composite scoring formula in @pipeline/nodes/evaluate.py:
+The composite scoring formula in @pipeline/nodes/evaluate.py divides a supplier's reliability score by their lead time for the target SKU. A 1-day supplier and a 2-day supplier with the same reliability score are not equally good — the faster one wins. At baseline:
 
-    composite = reliability_score / lead_days
-
-At baseline:
     QuickShip  (SUP-003): 0.92 / 1d = 0.920   ← clear winner for SKU-003
     FastParts  (SUP-001): 0.95 / 2d = 0.475   ← second place
 
@@ -69,61 +66,28 @@ Final composite scores:
 
 The crossover happens between rounds 4 and 5. After round 4, QuickShip's composite (0.4949) is still above FastParts (0.4750). After round 5, QuickShip drops to 0.4359 — below FastParts even before FastParts improves. The 8-round schedule was chosen to make the crossover clear and reproducible with exact predicted values at each step.
 
-The test runs with real LLM calls — evaluate.py asks the LLM to reason over the ranked supplier list and select the best option for the current stockout. The LLM sees the composite scores directly:
-
-```python
-ranked_info = [
-    {
-        "supplier_id": s["supplier_id"],
-        "name":        s["name"],
-        "score":       round(_score_supplier(s, sku_id), 3),  # composite
-        "reliability": s["reliability_score"],
-        "lead_days":   s["catalog"][sku_id]["lead_days"],
-    }
-    for s in ranked[:5]
-]
-```
-
-Between run 1 and run 2, QuickShip moves from the top of that list (score=0.920) to below FastParts (score=0.436). The LLM receives a different ranking and is expected to produce a different recommendation.
+The test runs with real LLM calls — evaluate.py asks the LLM to reason over a ranked list of up to 5 suppliers, each showing their composite score, raw reliability, and lead time for SKU-003. The ranking is pre-calculated in evaluate.py and passed directly to the model (@pipeline/nodes/evaluate.py). Between run 1 and run 2, QuickShip moves from the top of that list (composite 0.920) to below FastParts (composite 0.436). The LLM receives a different ranking and is expected to produce a different recommendation.
 
 Score trajectory confirmed from the first run:
 
-```
-#    Label                    Before     After    Perf
---   ----                     ------     -----    ----
-1    QuickShip  8d late  #1   0.9200    0.7760     0.2
-2    QuickShip  8d late  #2   0.7760    0.6608     0.2
-3    QuickShip  8d late  #3   0.6608    0.5686     0.2
-4    QuickShip  8d late  #4   0.5686    0.4949     0.2
-5    QuickShip  8d late  #5   0.4949    0.4359     0.2
-6    FastParts  on-time  #1   0.9500    0.9600     1.0
-7    FastParts  on-time  #2   0.9600    0.9680     1.0
-8    FastParts  on-time  #3   0.9680    0.9744     1.0
-```
+    #    Label                    Before     After    Perf
+    --   ----                     ------     -----    ----
+    1    QuickShip  8d late  #1   0.9200    0.7760     0.2
+    2    QuickShip  8d late  #2   0.7760    0.6608     0.2
+    3    QuickShip  8d late  #3   0.6608    0.5686     0.2
+    4    QuickShip  8d late  #4   0.5686    0.4949     0.2
+    5    QuickShip  8d late  #5   0.4949    0.4359     0.2
+    6    FastParts  on-time  #1   0.9500    0.9600     1.0
+    7    FastParts  on-time  #2   0.9600    0.9680     1.0
+    8    FastParts  on-time  #3   0.9680    0.9744     1.0
 
 Every round matches the formula. QuickShip 0.9200 → 0.4359. FastParts 0.9500 → 0.9744.
 
 Two bugs found during the first full run:
 
-Bug 1 — approval filter too narrow: the original test looked for new approvals with action == "generate_po". The LLM in the decide node can also return "escalate" for an urgent stockout when it's uncertain about the right course of action — a valid response, not an error. An escalated approval is still queued, still has a supplier_id, but the filter missed it. Fixed by widening the search to any new approval for SKU-003, regardless of the specific action label:
+Bug 1 — approval filter too narrow: the original test looked for new approvals where action == "generate_po". The LLM in the decide node can also return "escalate" for an urgent stockout when it's uncertain — a valid response, not an error. An escalated approval is still queued, still has a supplier_id, but the original filter missed it. Fixed by widening the search to any new approval for SKU-003, regardless of action label (@tests/test_long_term_learning.py).
 
-```python
-# before: only found generate_po approvals
-return [a for a in pending
-        if a.get("created_at", "") >= t_start
-        and a.get("action") == "generate_po"]
-
-# after: finds any queued approval for the target SKU
-sku_matches = [a for a in approvals if a.get("sku_id") == sku_id]
-```
-
-Bug 2 — score preservation round-trip: the first implementation passed preserve_scores=True as a Python boolean query parameter through httpx to FastAPI. Python booleans in URL parameters don't always parse reliably across library versions. Fixed by adding PATCH /api/suppliers/{supplier_id}/score to @server/routers/suppliers.py and calling it explicitly in the test after each scenario injection — deterministic, no parsing ambiguity:
-
-```python
-def restore_scores(learned_scores: dict):
-    for supplier_id, score in learned_scores.items():
-        patch(f"/api/suppliers/{supplier_id}/score", reliability_score=score)
-```
+Bug 2 — score preservation round-trip: the first implementation passed preserve_scores=True as a URL query parameter through httpx to FastAPI. Python booleans in URL parameters don't always parse reliably across library versions. Fixed by adding a dedicated PATCH endpoint for supplier scores and calling it explicitly in the test after each scenario injection — deterministic, no parsing ambiguity (@server/routers/suppliers.py · @tests/test_long_term_learning.py).
 
 Both bugs were in the test infrastructure, not in the learning mechanism. The EMA formula worked correctly on the first run. Getting clean end-to-end evidence took one extra iteration.
 

@@ -50,30 +50,9 @@ Persistence — why SQLite:
 
 The project is school-scope. Adding PostgreSQL or MongoDB means a separate service, connection pooling, environment variables, and an extra setup step in the README before anything runs. SQLite is built into Python — no installation, no config, one betsy.db file at the project root that appears the first time the server starts. The tradeoff is no concurrent writes from multiple server processes, which doesn't apply here: there's one uvicorn worker, one AppState object.
 
-All writes go through a threading.Lock() in @server/db.py. The pipeline runs in a background thread (via APScheduler or BackgroundTasks), while approval actions arrive from HTTP requests — both paths can write simultaneously. The lock prevents corruption without the overhead of connection pooling:
+All writes go through a threading.Lock() in @server/db.py. The pipeline runs in a background thread (via APScheduler or BackgroundTasks), while approval actions arrive from HTTP requests — both paths can write simultaneously. The lock prevents corruption without the overhead of connection pooling.
 
-```python
-_lock = threading.Lock()
-
-def save_log_entry(entry: dict) -> None:
-    with _lock:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute(
-            "INSERT INTO agent_log (timestamp, trigger, analysis, decision, confidence, metadata) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (entry["timestamp"], entry["trigger"], ...)
-        )
-        conn.commit()
-        conn.close()
-```
-
-On server start, @server/state.py:__init__ calls db.init_db() then loads both tables back into memory:
-
-```python
-_db.init_db()
-self.agent_log = _db.load_log_entries()
-self.approvals  = _db.load_all_approvals()
-```
+On server start, state.py calls db.init_db() and then loads both tables back into memory — log entries and approvals return exactly as they were before the restart (@server/state.py · @server/db.py).
 
 The restart test confirmed it: 7 log entries and 1 pending approval reloaded from betsy.db after a hard server kill and fresh start — zero entries lost (@docs/test-report-dl06.md, T4).
 
@@ -86,19 +65,7 @@ The formula is a standard exponential moving average applied to delivery perform
 
 Alpha of 0.2 means any single delivery counts 20% and history counts 80%. It's moderately aggressive — a supplier with a 0.97 baseline who delivers 5 days late drops to 0.88 in one event. Ten consecutive deliveries each 10 or more days late would bring any supplier to zero. That's the right sensitivity: reputation takes time to build, but it can erode fast when it needs to.
 
-The update fires in @server/routers/orders.py the moment a PO is patched to "delivered":
-
-```python
-@router.patch("/{po_id}/status")
-def update_order_status(po_id: str, status: str, actual_delivery: str = None):
-    for order in state.purchase_orders:
-        if order["po_id"] == po_id:
-            order["status"] = status
-            if status == "delivered":
-                order["actual_delivery"] = actual_delivery or datetime.now().isoformat()
-                _apply_ema(order)
-            return order
-```
+The EMA update fires in @server/routers/orders.py the moment a PO is patched to "delivered" — the router reads the expected and actual delivery dates, calculates lateness, and calls a private _apply_ema() function that updates the supplier's reliability_score in state in place.
 
 Formula verification from @docs/test-report-dl06.md, using PrecisionParts GmbH (SUP-004) at baseline 0.97:
 
@@ -113,27 +80,9 @@ Known limitation: supplier scores are session-persistent. state.reset() — whic
 
 APScheduler — why BackgroundScheduler and not AsyncIOScheduler:
 
-The pipeline is synchronous. graph.invoke() runs all six nodes sequentially and takes 30–60 seconds with LLM calls. Running a synchronous blocking function inside AsyncIOScheduler would freeze FastAPI's event loop for the duration of every run — no API requests could be processed while the pipeline was running. BackgroundScheduler puts each job in a separate thread from uvicorn's thread pool, so the event loop stays free:
+The pipeline is synchronous — graph.invoke() runs all six nodes sequentially and takes 30–60 seconds with LLM calls. Running a synchronous blocking function inside AsyncIOScheduler would freeze FastAPI's event loop for the duration of every run — no API requests could be processed while the pipeline was running. BackgroundScheduler puts each job in a separate thread from uvicorn's thread pool, so the event loop stays free.
 
-```python
-# server/scheduler_instance.py — the entire file
-from apscheduler.schedulers.background import BackgroundScheduler
-scheduler = BackgroundScheduler()
-```
-
-The scheduler lives in its own module — not in main.py — because @server/routers/stats.py needs to read job.next_run_time to populate the stats endpoint. If scheduler were imported from main.py inside stats.py, Python would hit a circular import at startup. The singleton module breaks the cycle cleanly:
-
-```python
-# server/main.py — lifespan context
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    interval = int(os.getenv("AGENT_INTERVAL_MINUTES", "30"))
-    scheduler.add_job(_scheduled_run, "interval", minutes=interval,
-                      id="betsy_auto_run", replace_existing=True)
-    scheduler.start()
-    yield
-    scheduler.shutdown(wait=False)
-```
+The scheduler lives in its own three-line module — @server/scheduler_instance.py — not in main.py. That's because @server/routers/stats.py needs to read the scheduler's next_run_time to populate the stats endpoint. If the scheduler were imported from main.py inside stats.py, Python would hit a circular import at startup. The singleton module breaks the cycle cleanly. The lifespan context in @server/main.py starts the scheduler, registers the pipeline job with the interval from AGENT_INTERVAL_MINUTES, and shuts it down on exit.
 
 Default interval is 30 minutes. Set AGENT_INTERVAL_MINUTES=1 for testing — the pipeline fires within 60 seconds and the next_run card in betsy.html updates immediately.
 
@@ -141,19 +90,10 @@ Stats panel:
 
 GET /api/stats computes everything from state and the scheduler at query time:
 
-```json
-{
-  "decisions_total":   9,
-  "decisions_auto":    0,
-  "auto_rate_pct":     0.0,
-  "pending_approvals": 1,
-  "queue_value_eur":   5500.0,
-  "scheduler_active":  true,
-  "next_run":          "2026-05-31T18:44:57..."
-}
-```
+    decisions_total, decisions_auto, auto_rate_pct,
+    pending_approvals, queue_value_eur, scheduler_active, next_run
 
-betsy.html shows five stat cards above the approvals section — decisions made, autonomous rate, awaiting your OK, value in queue, next auto-run — all updating on the existing 5-second poll.
+betsy.html shows five stat cards above the approvals section — decisions made, autonomous rate, awaiting your OK, value in queue, next auto-run — all updating on the existing 5-second poll (@server/routers/stats.py).
 
 ![betsy.html stats panel — five metric cards: 9 decisions made, 0.0% autonomous rate, 1 awaiting OK, €5,500 in queue, next auto-run timestamp visible](./images/dl06-stats-panel.png)
 
