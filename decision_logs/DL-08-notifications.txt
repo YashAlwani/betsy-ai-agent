@@ -1,0 +1,150 @@
+DL-08 — Push Notifications: Desktop Alerts and Email for Betsy
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+DL-07 closed with proof that Betsy learns from delivery history and changes supplier decisions over time. At that point the agent loop was complete: detect → evaluate → decide → act → approve → learn. But the last gap in the HITL flow remained untouched: Jenny has to keep betsy.html open and wait for a 5-second poll to know that something needs her attention. If she's in a meeting, on another screen, or away from her desk, decisions sit in the queue unseen. The agent stops here — yours to act on — but nobody told you.
+
+DL-05 built the approval queue. DL-06 made it survive server restarts. DL-08 makes it reach Jenny wherever she is.
+
+Confirmed zero existing notification infrastructure across the full codebase before starting:
+- No "webhook", "notify", "alert", "email", "smtp", or "toast" in any .py file
+- No outbound HTTP from server-side code (httpx only used server→localhost in api_client.py)
+- The only signal from Betsy to Jenny was a badge count on a dashboard tab
+
+This is the first feature added that has no predecessor code anywhere in the project.
+
+
+1. Research question
+
+How do I push Betsy's decisions to Jenny without requiring her to watch the dashboard — and without adding unreliable external dependencies?
+
+
+2. Current LO stage
+
+[ ] Analyzing
+[ ] Advising
+[ ] Designing
+[x] Realizing — built the notification system end-to-end
+[x] Managing — 22/22 tests pass, all trigger points verified, UI settings panel working
+
+
+3. What makes a good decision here
+
+- A notification must reach Jenny outside the browser — the dashboard already handles in-browser signals
+- Notification failure must never break the agent execution path
+- Settings should be configurable from betsy.html — no terminal access required
+- Zero new required dependencies — optional install only
+- All 4 meaningful agent events should be covered: approval needed, auto-PO placed, supplier score drop, and duplicate invoice
+
+
+4. What I decided
+
+Build a two-channel notification system using:
+1. Desktop toast notifications via plyer (optional dependency, graceful no-op if not installed)
+2. Email via Python's built-in smtplib — no new required dependency
+
+All notification logic lives in server/notifier.py. Settings live in server/config.py as mutable module-level attributes (readable from env vars on startup, patchable at runtime via POST /api/notifications/config). A settings panel was added to betsy.html.
+
+
+5. Why this decision
+
+Method: Lab
+
+The implementation question was which notification channels to use and where to trigger them.
+
+--- Channel selection ---
+
+Two channels were considered:
+
+a) Third-party service (Slack, Teams, Pushover, Ntfy)
+   - Pros: reliable delivery, mobile support, threading
+   - Cons: requires account setup, network dependency, secrets management, blocks educational portability ("share this project" breaks if they don't have the same Slack workspace)
+
+b) Desktop + email via standard library
+   - Desktop (plyer): one pip install, works on Windows/macOS/Linux, shows OS toast notification with app name, title, and message. Graceful no-op if plyer is not installed.
+   - Email (smtplib): built into Python stdlib, works with any SMTP provider (Gmail app passwords, Outlook, self-hosted). Zero new hard dependencies.
+   - Combined: Jenny gets a pop-up on the active screen AND an email she can check later. Both channels are opt-in via env vars.
+
+Decision: desktop + email. Matches what an ops manager actually uses (desktop + inbox), teaches SMTP integration as part of the AI agent stack, and doesn't require signing up for anything external.
+
+--- Trigger placement ---
+
+The key insight: all four trigger types (generate_po, flag_duplicate, flag_for_approval, escalate) have auto_approved=False in decide.py. This means every one of them goes through pipeline/nodes/act.py → shared/api_client.py → POST /api/approvals. The notification can fire entirely from server/routers/approvals.py:queue_approval — one trigger point covers all four cases.
+
+This was confirmed by reading decide.py lines 38-46 (flag_duplicate always auto_approved=False), lines 47-56 (price_spike, same), and lines 58-66 (escalate, same).
+
+The two additional triggers — EMA score drops and auto-approved POs — fire from server/routers/orders.py, which was already the right place for EMA updates (_apply_ema) and PO creation (create_order).
+
+No pipeline code was modified. Notifications are a pure server-side side-effect.
+
+--- Score drop threshold ---
+
+The score_drop notification fires only when a supplier's score crosses *below* the threshold, not simply when it's below it. The condition in orders.py is:
+
+    if new_score < config.SCORE_DROP_THRESHOLD and old_score >= config.SCORE_DROP_THRESHOLD:
+
+This prevents repeated alerts every time a supplier with a low score makes another late delivery. First crossing fires the alert; subsequent updates at the same level are silent.
+
+--- Architecture: mutable config ---
+
+server/config.py uses module-level attributes (not frozen constants) so POST /api/notifications/config can update them at runtime. The alternative was writing a .env file from the API endpoint, but that requires file I/O permissions and a server restart to take effect. The module-attribute approach is simpler, works immediately, and is appropriate for an educational project where persistence across restarts is handled by asking the user to set env vars.
+
+The config.update() function validates keys against existing attributes (unknown keys ignored) and coerces types (bool, int, float, str). This prevents bad API calls from corrupting config state.
+
+--- Test strategy ---
+
+22 tests covering:
+- Desktop: plyer called when enabled, no-op when disabled, 256-char truncation, exception swallowing
+- Email: SMTP worker sends correct from/to, no-op when unconfigured, daemon thread spawned, SMTP exception swallowed
+- Public functions: each fires when toggle is on, skips when off
+- config.update(): type coercion, unknown key rejection
+
+All mocked — no real SMTP or plyer calls. Tests run in 0.27s.
+
+What surprised me: plyer can be mocked by patching sys.modules directly before import, but the module reload is necessary because server.notifier reads from server.config at function call time (not at import time), so patching config module attributes is sufficient for the toggle tests without needing to reload the module.
+
+Full test output:
+    22 passed in 0.27s
+
+@tests/test_notifier.py
+
+
+6. Does this hold up
+
+- Approval queued → notification fires: ✅
+  server/routers/approvals.py calls notifier.notify_approval_required(item) immediately after db.save_approval(item). Action label maps correctly: generate_po → "Purchase order", flag_duplicate → "Duplicate invoice flagged", etc.
+
+- Score drop → notification fires: ✅
+  server/routers/orders.py:_apply_ema fires notifier.notify_score_drop() only on the first threshold crossing (old_score ≥ threshold, new_score < threshold). Subsequent late deliveries by the same supplier are silent.
+
+- Auto-approved PO → notification fires: ✅
+  server/routers/orders.py:create_order fires notifier.notify_auto_approved() when requested_by == "betsy-pipeline" and NOTIFY_ON_AUTO_PO is True. Defaults to False (human-approved POs don't generate noise).
+
+- Notification failure cannot break agent: ✅
+  Every send path wraps in try/except. Email sends in a daemon thread so even a 30-second SMTP timeout doesn't block the API response.
+
+- Settings configurable from UI: ✅
+  betsy.html now has a collapsible "Notifications" panel with SMTP fields and per-trigger toggles. "Save settings" POSTs to /api/notifications/config. "Send test" POSTs to /api/notifications/test. Settings persist in localStorage across page refreshes and propagate to the server for the current session.
+
+What I assumed: Jenny uses Gmail or an SMTP provider that supports TLS on port 587. This covers Gmail app passwords, Outlook, and most hosted email. SMTP without TLS (port 25) is not supported — this is intentional, plain-auth SMTP should not be used.
+
+Known limitation: runtime config changes survive until server restart. If Jenny configures SMTP from the UI and the server restarts, she needs to reconfigure or set env vars in .env. This is acceptable for an educational prototype.
+
+
+7. What this unlocks
+
+What I can now do:
+- Jenny closes betsy.html and goes to a meeting. Betsy detects a critical stockout and queues an $11,937 PO. Jenny's desktop shows a toast: "Betsy needs your OK — SKU-003". Her inbox gets an HTML email with the supplier, cost, and reasoning, and a link back to the dashboard. She approves from her phone on the way back to her desk.
+- QuickShip makes five late deliveries. On the sixth, the EMA score crosses below 0.6. Jenny gets a desktop alert: "Supplier alert — QuickShip | score dropped: 0.62 → 0.56". She can escalate the conversation with the supplier before Betsy stops recommending them.
+- The full loop — Betsy decides → Jenny is notified → Jenny approves → PO placed — works without Jenny watching any dashboard.
+
+Next LO stage: fully autonomous with human oversight — the system notifies rather than requiring surveillance.
+
+How I'll know this worked: configure SMTP in the UI, run the stockout_warning scenario, watch the desktop toast appear, check the inbox for the HTML email with the approval card details. Then set NOTIFY_EMAIL="" and run again — no email sent, no error thrown.
+
+
+Files added: @server/config.py · @server/notifier.py · @server/routers/notifications.py · @tests/test_notifier.py
+Files modified: @server/main.py · @server/routers/approvals.py · @server/routers/orders.py · @requirements.txt · @dashboard/betsy.html
+*@LO4: Realizing · @LO5: Managing*

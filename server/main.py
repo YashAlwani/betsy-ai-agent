@@ -7,7 +7,7 @@ from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from server.routers import inventory, suppliers, orders, invoices, scenarios, agent_log, approvals, stats
+from server.routers import inventory, suppliers, orders, invoices, scenarios, agent_log, approvals, stats, notifications
 from server.scheduler_instance import scheduler
 
 DASHBOARD = Path(__file__).parent.parent / "dashboard" / "index.html"
@@ -62,6 +62,7 @@ app.include_router(scenarios.router)
 app.include_router(agent_log.router)
 app.include_router(approvals.router)
 app.include_router(stats.router)
+app.include_router(notifications.router)
 
 
 @app.get("/", response_class=FileResponse, tags=["dashboard"])

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from server import db
+from server import config, db, notifier
 from server.state import state
 
 EMA_ALPHA = 0.2  # new delivery counts 20%, history 80%
@@ -60,6 +60,10 @@ def create_order(po: POCreate):
         "requested_by": po.requested_by,
     }
     state.purchase_orders.append(order)
+
+    if po.requested_by == "betsy-pipeline":
+        notifier.notify_auto_approved(order)
+
     return order
 
 
@@ -98,6 +102,14 @@ def _apply_ema(order: dict) -> None:
         min(1.0, max(0.0, EMA_ALPHA * performance + (1 - EMA_ALPHA) * old_score)), 4
     )
     supplier["reliability_score"] = new_score
+
+    if new_score < config.SCORE_DROP_THRESHOLD and old_score >= config.SCORE_DROP_THRESHOLD:
+        notifier.notify_score_drop(
+            supplier_name=supplier["name"],
+            old_score=old_score,
+            new_score=new_score,
+            po_id=order["po_id"],
+        )
 
     log_entry = {
         "timestamp": datetime.now().isoformat(),

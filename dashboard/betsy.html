@@ -520,6 +520,128 @@
     font-size: 13px;
   }
 
+  /* ── NOTIFICATION SETTINGS ── */
+  .notif-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .notif-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .notif-header:hover { background: #fafafa; }
+  .notif-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .notif-title .notif-status-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block;
+  }
+  .notif-title .notif-status-dot.off { background: var(--border); }
+  .notif-toggle-icon { font-size: 11px; color: var(--muted); }
+  .notif-body {
+    padding: 16px 18px 18px;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+  .notif-body.open { display: block; }
+  .notif-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .notif-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 5px;
+  }
+  .notif-field input {
+    width: 100%;
+    padding: 7px 11px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .notif-field input:focus { border-color: var(--ai); }
+  .notif-field input::placeholder { color: var(--muted); }
+  .notif-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .notif-toggle-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .notif-toggle-chip.on {
+    border-color: var(--green);
+    background: var(--green-bg);
+    color: var(--green);
+    font-weight: 600;
+  }
+  .notif-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .notif-save-btn {
+    padding: 7px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    background: var(--ai);
+    color: #fff;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .notif-save-btn:hover { opacity: 0.85; }
+  .notif-test-btn {
+    padding: 7px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .notif-test-btn:hover { border-color: var(--ai); color: var(--ai); }
+  .notif-hint { font-size: 11px; color: var(--muted); margin-left: auto; }
+
   /* ── STATS PANEL ── */
   .stats-row {
     display: grid;
@@ -649,6 +771,53 @@
       <div class="spinner" id="spinner"></div>
       <span id="run-btn-label">✦ Run Betsy</span>
     </button>
+  </div>
+
+  <!-- NOTIFICATION SETTINGS -->
+  <div class="notif-panel" id="notif-panel">
+    <div class="notif-header" onclick="toggleNotifPanel()">
+      <span class="notif-title">
+        <span class="notif-status-dot off" id="notif-dot"></span>
+        Notifications
+      </span>
+      <span class="notif-toggle-icon" id="notif-chevron">▶</span>
+    </div>
+    <div class="notif-body" id="notif-body">
+      <div class="notif-grid">
+        <div class="notif-field">
+          <label>Email address</label>
+          <input type="email" id="notif-email" placeholder="jenny@company.com" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP user (sender)</label>
+          <input type="email" id="notif-smtp-user" placeholder="betsy-alerts@gmail.com" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP password / app password</label>
+          <input type="password" id="notif-smtp-pass" placeholder="••••••••••••••••" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP host : port</label>
+          <input type="text" id="notif-smtp-host" placeholder="smtp.gmail.com:587" />
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Notify me when</span>
+      </div>
+      <div class="notif-toggles">
+        <span class="notif-toggle-chip on" data-key="approval"   onclick="toggleChip(this)">✋ Approval needed</span>
+        <span class="notif-toggle-chip on" data-key="duplicate"  onclick="toggleChip(this)">🔴 Duplicate invoice</span>
+        <span class="notif-toggle-chip on" data-key="score_drop" onclick="toggleChip(this)">⬇ Supplier score drops</span>
+        <span class="notif-toggle-chip"    data-key="auto_po"    onclick="toggleChip(this)">✓ Auto-approved PO</span>
+      </div>
+
+      <div class="notif-actions">
+        <button class="notif-save-btn" onclick="saveNotifSettings()">Save settings</button>
+        <button class="notif-test-btn" onclick="sendTestNotification()">Send test</button>
+        <span class="notif-hint" id="notif-hint"></span>
+      </div>
+    </div>
   </div>
 
   <!-- INVENTORY TABLE -->
@@ -1207,6 +1376,109 @@
 
   refresh();
   setInterval(refresh, 5000);
+
+  // ── Notification settings panel ───────────────────────────────────────────────
+  const NOTIF_STORAGE_KEY = 'betsy_notif_settings';
+
+  function toggleNotifPanel() {
+    const body    = document.getElementById('notif-body');
+    const chevron = document.getElementById('notif-chevron');
+    const open    = body.classList.toggle('open');
+    chevron.textContent = open ? '▼' : '▶';
+    if (open) loadNotifSettings();
+  }
+
+  function toggleChip(el) {
+    el.classList.toggle('on');
+  }
+
+  function loadNotifSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || '{}');
+      if (s.email)     document.getElementById('notif-email').value     = s.email;
+      if (s.smtp_user) document.getElementById('notif-smtp-user').value = s.smtp_user;
+      if (s.smtp_host) document.getElementById('notif-smtp-host').value = s.smtp_host;
+      // password intentionally not reloaded from storage
+
+      const chips = document.querySelectorAll('.notif-toggle-chip');
+      chips.forEach(c => {
+        const key = c.dataset.key;
+        if (key && key in (s.triggers || {})) {
+          c.classList.toggle('on', s.triggers[key]);
+        }
+      });
+    } catch {}
+  }
+
+  async function saveNotifSettings() {
+    const email    = document.getElementById('notif-email').value.trim();
+    const smtpUser = document.getElementById('notif-smtp-user').value.trim();
+    const smtpPass = document.getElementById('notif-smtp-pass').value;
+    const smtpRaw  = document.getElementById('notif-smtp-host').value.trim();
+    const [smtpHost, smtpPort] = smtpRaw.includes(':')
+      ? smtpRaw.split(':')
+      : [smtpRaw, '587'];
+
+    const triggers = {};
+    document.querySelectorAll('.notif-toggle-chip').forEach(c => {
+      if (c.dataset.key) triggers[c.dataset.key] = c.classList.contains('on');
+    });
+
+    // Persist non-secret settings in localStorage for UI reload
+    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify({
+      email, smtp_user: smtpUser, smtp_host: smtpRaw, triggers,
+    }));
+
+    // Push to server env-vars via the config endpoint (best-effort)
+    try {
+      const body = {
+        NOTIFY_EMAIL: email,
+        SMTP_USER: smtpUser,
+        SMTP_HOST: smtpHost,
+        SMTP_PORT: smtpPort,
+        NOTIFY_ON_APPROVAL:   triggers.approval   ?? true,
+        NOTIFY_ON_DUPLICATE:  triggers.duplicate  ?? true,
+        NOTIFY_ON_SCORE_DROP: triggers.score_drop ?? true,
+        NOTIFY_ON_AUTO_PO:    triggers.auto_po    ?? false,
+      };
+      if (smtpPass) body.SMTP_PASS = smtpPass;
+      await fetch('/api/notifications/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch {}
+
+    updateNotifDot(email || smtpUser);
+    setNotifHint('Settings saved.');
+  }
+
+  async function sendTestNotification() {
+    setNotifHint('Sending...');
+    try {
+      await post('/api/notifications/test', {});
+      setNotifHint('Test sent! Check your desktop and inbox.');
+    } catch {
+      setNotifHint('Could not reach server — is it running?');
+    }
+  }
+
+  function setNotifHint(msg) {
+    const el = document.getElementById('notif-hint');
+    el.textContent = msg;
+    setTimeout(() => { el.textContent = ''; }, 5000);
+  }
+
+  function updateNotifDot(configured) {
+    const dot = document.getElementById('notif-dot');
+    dot.className = 'notif-status-dot' + (configured ? '' : ' off');
+  }
+
+  // Restore dot state from storage on load
+  try {
+    const s = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || '{}');
+    updateNotifDot(s.email || s.smtp_user);
+  } catch {}
 </script>
 </body>
 </html>
