@@ -66,6 +66,16 @@ Three gaps closed in one sprint: SQLite persistence (agent_log + approvals survi
 
 ---
 
+## DL-08 — Does Betsy tell Jenny when it matters?
+`DL-08-notifications.txt`
+
+Zero notification infrastructure existed before this DL. Jenny had to keep betsy.html open and wait for a 5-second poll. Now Betsy pushes desktop toast notifications (via plyer) and HTML emails (via stdlib smtplib) the moment any of four events occur: approval needed, auto-approved PO placed, supplier score crossing the warning threshold, or duplicate invoice flagged. All notification code lives server-side — no pipeline changes. Notification failure is fully contained and never interrupts the agent. 22 unit tests, all passing.
+
+**Decision:** Desktop + email via plyer + smtplib. Settings panel added to betsy.html. Runtime config via POST /api/notifications/config, backed by mutable module-level attributes in server/config.py.
+**GAP → future:** Runtime config resets on server restart — users should set .env vars for persistence.
+
+---
+
 ## DL-07 — Does Betsy actually get smarter?
 `DL-07-long-term-learning.txt`
 

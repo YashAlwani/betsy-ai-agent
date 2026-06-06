@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 
-from server import db
+from server import db, notifier
 from server.state import state
 
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
@@ -24,6 +24,12 @@ def queue_approval(item: dict):
         item["created_at"] = datetime.now().isoformat()
     state.approvals.append(item)
     db.save_approval(item)
+
+    # Fire desktop + email notification for the queued item.
+    # All action types (generate_po, flag_duplicate, flag_for_approval, escalate)
+    # use the same approval notification; the action label differentiates them.
+    notifier.notify_approval_required(item)
+
     return item
 
 
