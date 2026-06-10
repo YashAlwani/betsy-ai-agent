@@ -1,0 +1,15 @@
+---
+title: Scenario — Price spike (SKU-003)
+---
+flowchart TB
+    subgraph BEF["BEFORE — manual"]
+        direction TB
+        b1["All quotes come in unusually high"] --> b2["No price baseline to compare against"]
+        b2 --> b3["Risk of overpaying under production pressure"]
+    end
+    subgraph AFT["AFTER — Betsy"]
+        direction TB
+        a1["Best quote compared to the stored historical average"] --> a2["Quote is above the spike limit — do not auto-order"]
+        a2 --> a3["Escalated to Jenny with all quotes + history for an informed call"]
+    end
+    BEF -.->|same situation| AFT

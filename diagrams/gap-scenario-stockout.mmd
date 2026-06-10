@@ -1,0 +1,16 @@
+---
+title: Scenario — Stockout (SKU-003 Steel Rods)
+---
+flowchart TB
+    subgraph BEF["BEFORE — manual"]
+        direction TB
+        b1["Monday ERP check spots 45 units left"] --> b2["Emergency email to 3 suppliers — about 30 min"]
+        b2 --> b3["Wait 24–48 hrs for replies — production line at risk"]
+    end
+    subgraph AFT["AFTER — Betsy"]
+        direction TB
+        a1["Monitor flags 45 units vs reorder point 200 = 1.5 days left — under 1 min"]
+        a1 --> a2["All 6 suppliers checked; QuickShip (1-day lead) picked — under 5 sec"]
+        a2 --> a3["PO sent, Jenny notified; stock arrives next day with buffer"]
+    end
+    BEF -.->|same situation| AFT

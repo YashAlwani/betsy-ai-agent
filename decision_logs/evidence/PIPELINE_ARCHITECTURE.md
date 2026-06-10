@@ -1,475 +1,337 @@
 # Betsy — Pipeline Architecture
 
 > **Linear · Sequential · Single-threaded · Audit-first**
-> One stage feeds the next. All conditions detected before any action is taken.
-> LLM (local Ollama) handles judgment calls. Rule-based fallback if model is unavailable.
+> The pipeline is the simpler of Betsy's two agent designs. It walks one
+> procurement run through six fixed stages, in order, with no branching: pull the
+> data, find every problem, weigh the options, decide, act, and write down what
+> happened. It is built as a **LangGraph `StateGraph`** — a small graph whose
+> nodes each read and update one shared state object. LLM calls (local Ollama)
+> handle the judgement-heavy steps; every LLM call has a rule-based fallback so
+> the run still completes if the model is unreachable.
 
 ---
 
 ## Overview
 
-```
-Trigger ──► INGEST ──► DETECT ──► EVALUATE ──► DECIDE ──► [APPROVAL] ──► ACT ──► AUDIT
-              (1)        (2)         (3) ◄LLM    (4) ◄LLM              (5)      (6) ◄LLM
+A single run flows straight through six nodes. There is no skipping, no
+reordering, and no early exit — even when something fails, the run still reaches
+the final `audit` node so that every attempt leaves a record behind.
+
+```mermaid
+flowchart LR
+    T([Trigger]) --> I["1 · ingest"]
+    I --> D["2 · detect"]
+    D --> E["3 · evaluate (LLM)"]
+    E --> DC["4 · decide (LLM)"]
+    DC --> A["5 · act"]
+    A --> AU["6 · audit (LLM)"]
+    AU --> Z([done])
+    A -. "items needing a human" .-> Q[("/api/approvals queue")]
 ```
 
-Each stage transforms a shared `PipelineContext` object. Stages cannot skip or reorder.
-A `PipelineHalt` exception short-circuits to Stage 6 (Audit always runs).
+Each node receives the shared `PipelineState`, does its one job, and returns the
+fields it changed. Because the graph is linear, the order in the diagram is also
+the exact order of execution — there are no conditional edges to trace.
 
 ---
 
-## Entry Point — `pipeline/run.py`
+## Entry point — `pipeline/run.py`
+
+`run.py` is how a run is started, either by a person from the command line or by
+the scheduler/server. It builds the compiled graph once, hands it a fresh empty
+state, and calls `graph.invoke(...)`. There is no `approval_mode` flag and no
+approval object passed in here — approvals are handled later, out of band,
+through the API queue (see *How human approval works*).
 
 ```
-run_pipeline(
-  triggered_by   = "manual" | "scheduler" | "test"
-  api_base_url   = "http://localhost:8000"
-  ollama_base_url = env:OLLAMA_BASE_URL  →  default: http://localhost:11434
-  ollama_model    = env:OLLAMA_MODEL     →  default: mistral
-  approval_mode  = "console" | "auto_approve" | "auto_reject" | "webhook"
-)
-→ PipelineContext
+run_full(scenario: str | None = None) -> dict
+  - if a scenario name is given, POST it to the mock API first (then reset after)
+  - graph = build()                      # pipeline/graph.py
+  - final = graph.invoke(initial_state)  # runs all six nodes in order
+  - returns the final PipelineState dict
 ```
 
-Creates: `PipelineContext` · `BetsyClient` · `LLMClient` · `ApprovalGate`
+Command-line shapes (`python -m pipeline.run`):
 
-Runs stages in order. Intercepts `PipelineHalt` → jumps to Audit.
+| Command | What it does |
+|---|---|
+| `python -m pipeline.run` | Full six-node run against the live API on :8000 |
+| `python -m pipeline.run --scenario stockout_warning` | Inject a scenario, run, then reset |
+| `python -m pipeline.run --stage detect` | Run one node in isolation for debugging (delegates to that node module's `__main__`) |
+
+The valid scenario names are `stockout_warning`, `price_spike`,
+`duplicate_invoice`, and `supplier_oos`. If the API is not reachable, `run.py`
+stops early with a clear message telling you how to start the server.
 
 ---
 
-## Shared State — `PipelineContext` (`pipeline/context.py`)
+## Shared state — `PipelineState` (`pipeline/state.py`)
+
+Every node reads from and writes to one `TypedDict`. There is no separate
+`PipelineContext` class and no nested dataclasses — it is a flat dictionary of
+lists that grows as the run progresses. Each node only fills the fields that are
+its responsibility, which keeps the data flow easy to follow.
 
 ```
-PipelineContext
-├── run metadata:      run_id · started_at · triggered_by · scenario
-│
-├── Stage 1 output:    inventory[] · all_pos[] · open_pos[] · invoices[] · suppliers[]
-│
-├── Stage 2 output:    detected_conditions[]
-│                        DetectedCondition:
-│                          type       → "stockout" | "price_spike" | "duplicate_invoice"
-│                          severity   → "critical" | "warning" | "info"
-│                          sku_id     → str | None
-│                          data       → {raw numbers: days_remaining, pct_above_avg, …}
-│
-├── Stage 3 output:    evaluated_items[]
-│                        EvaluatedItem:
-│                          condition         → DetectedCondition
-│                          ranked_options[]  → [{supplier_id, score, unit_price, lead_days}]
-│                          best_option       → dict | None
-│                          llm_reasoning     → str  (LLM explanation of recommendation)
-│                          confidence        → float 0.0–1.0
-│
-├── Stage 4 output:    decisions[]
-│                        Decision:
-│                          action          → "generate_po" | "flag_duplicate" |
-│                                            "flag_for_approval" | "escalate" | "no_action"
-│                          auto_approved   → bool
-│                          requires_human  → bool
-│                          llm_reasoning   → str  (LLM explanation of decision)
-│                          confidence      → float
-│                          metadata        → dict
-│
-├── Stage 5 output:    actions_taken[]
-│                        ActionResult:
-│                          decision     → Decision
-│                          api_endpoint → str
-│                          api_payload  → dict
-│                          response     → dict | None
-│                          success      → bool
-│                          error        → str | None
-│
-└── Stage 6 output:    audit_written · final_status · halt_reason
+PipelineState (TypedDict)
+├── ingest fills:    inventory[] · suppliers[] · all_pos[] · open_pos[] · invoices[]
+├── detect fills:    detected[]    # DetectedCondition dicts
+├── evaluate fills:  evaluated[]   # EvaluatedItem dicts
+├── decide fills:    decisions[]   # Decision dicts
+├── act fills:       actions[]     # ActionResult dicts
+├── audit fills:     report        # plain-English run summary
+└── any node may append:  errors[] # uses an operator.add reducer, so node
+                                   # errors accumulate instead of overwriting
 ```
+
+The shapes referenced above (`DetectedCondition`, `EvaluatedItem`, `Decision`,
+`ActionResult`) are plain dicts, not classes — their keys are described in each
+stage below.
 
 ---
 
-## Stage 1 — Ingest (`pipeline/stages/ingest.py`)
+## Stage 1 — Ingest (`pipeline/nodes/ingest.py`)
+
+**Job:** fetch everything the run needs in one pass, so no later node has to make
+its own API calls. This keeps all I/O in one place and makes the rest of the
+pipeline pure data-processing.
 
 ```
-Role: Fetch all data the pipeline needs in one pass. No decisions.
-
-Functions
-─────────
-run(ctx, client) → PipelineContext
-
-  client.get_inventory()          ──► ctx.inventory         (12 SKUs)
-  client.get_purchase_orders()    ──► ctx.all_pos            (full PO history)
-                                       ctx.open_pos           (pending only, pre-filtered)
-  client.get_invoices()           ──► ctx.invoices           (14 invoices)
-  client.get_suppliers()          ──► ctx.suppliers          (6 suppliers)
-  client.get_active_scenario()    ──► ctx.scenario
-
-API calls:  GET /api/inventory
-            GET /api/purchase-orders
-            GET /api/invoices
-            GET /api/suppliers
-
-Halt:       any request fails → PipelineHalt("API unavailable")
-            (Audit stage still runs — partial context is logged)
-
-LLM:        none
+node(state) -> dict
+  GET /api/inventory          -> inventory[]   (12 SKUs)
+  GET /api/suppliers          -> suppliers[]   (6 suppliers)
+  GET /api/purchase-orders    -> all_pos[]      (full PO history)
+                                 open_pos[]     (everything not delivered/cancelled)
+  GET /api/invoices           -> invoices[]
 ```
+
+`open_pos` is just `all_pos` with delivered and cancelled orders filtered out —
+later stages use it to avoid re-ordering something that is already on its way.
+**LLM:** none. **On failure:** the node catches the exception and appends a
+message to `errors[]`; the run continues to the next node rather than crashing.
 
 ---
 
-## Stage 2 — Detect (`pipeline/stages/detect.py`)
+## Stage 2 — Detect (`pipeline/nodes/detect.py`)
 
-```
-Role: Find ALL anomalies in ingested data.
-      No short-circuit. No LLM. Purely rule-based.
-      ALL conditions are collected before any evaluation begins.
+**Job:** find *all* anomalies in the ingested data before any of them are acted
+on. This stage is deliberately rule-based and LLM-free, so detection is fast,
+deterministic, and easy to test. It collects every condition it finds; it never
+stops at the first one.
 
-Functions
-─────────
-run(ctx, client) → PipelineContext
+Three detectors run, and their results are concatenated into `detected[]`:
 
-  _detect_duplicate_invoices(invoices)
-    Algorithm:  group by (supplier_id, amount)
-                flag pairs where date_diff ≤ 60 days
-    Produces:   DetectedCondition(type="duplicate_invoice", severity="warning")
-    data keys:  invoice_1_id, invoice_2_id, amount, days_apart, risk_level
+- **`_detect_duplicates(invoices)`** — compares every pair of invoices; flags a
+  pair as `duplicate_invoice` when they share the same supplier, the same amount
+  (within a cent), and are **within 60 days** of each other. Each detector pair
+  is recorded once.
+- **`_detect_price_spikes(inventory, all_pos, suppliers)`** — for each SKU it
+  builds a **historical baseline from past purchase-order prices** (the mean of
+  that SKU's `unit_price` across `all_pos`), then compares it to the best current
+  quote among available suppliers. It flags `price_spike` when the best quote is
+  more than **30% above** that baseline (`PRICE_SPIKE_THRESHOLD = 0.30`).
+- **`_detect_stockouts(inventory)`** — flags any SKU whose `current_stock` is
+  below its `reorder_point`. It also computes `days_remaining = current_stock /
+  daily_usage_avg` and marks the condition **critical** when that is under 2 days,
+  otherwise **warning**.
 
-  _detect_price_spikes(inventory, all_pos, suppliers, threshold=0.18)
-    Algorithm:  baseline    = inventory[i].unit_cost_avg
-                best_quote  = min quote from available suppliers for this SKU
-                spike if    best_quote > baseline × 1.18
-    Produces:   DetectedCondition(type="price_spike", severity="warning")
-    data keys:  sku_id, best_quote, baseline, pct_above, threshold
-
-  _detect_stockouts(inventory)
-    Algorithm:  flag if current_stock < reorder_point
-                days_remaining = current_stock / daily_usage_avg
-                severity = "critical" if days_remaining < 2.0 else "warning"
-    Produces:   DetectedCondition(type="stockout", severity="critical|warning")
-    data keys:  current_stock, reorder_point, daily_usage_avg, days_remaining, max_stock
-
-API calls:  none
-LLM:        none
-
-Output:     ctx.detected_conditions[]  (may be empty — no conditions found is valid)
-```
+**LLM:** none. **Output:** `detected[]` — possibly empty, which is a perfectly
+valid result meaning "nothing is wrong right now."
 
 ---
 
-## Stage 3 — Evaluate (`pipeline/stages/evaluate.py`) ◄ LLM
+## Stage 3 — Evaluate (`pipeline/nodes/evaluate.py`) · LLM
 
-```
-Role: For each detected condition, score available options.
-      LLM explains the best choice (supplier, risk level).
-      Always has a rule-based fallback if Ollama is unreachable.
+**Job:** turn each detected condition into a scored, explained recommendation.
+This is the first stage that reasons rather than just measures, so it is also the
+first to call the LLM — always with a rule-based fallback behind it.
 
-Functions
-─────────
-run(ctx, client, llm) → PipelineContext
+- **Stockout** → `_evaluate_stockout`. It keeps only suppliers that are available
+  and actually carry the SKU, then ranks them by a simple score:
+  `reliability_score / lead_days` (a supplier that is both reliable and fast wins).
+  It then asks the LLM to pick the best option and explain the trade-off in plain
+  language. If the LLM is unreachable, the top-ranked supplier wins automatically
+  and the reasoning is marked as a rule-based fallback. Result action:
+  `generate_po`.
+- **Price spike** → `_evaluate_price_spike`. No LLM is used here on purpose:
+  price spikes always go to a human, so confidence is hard-set to `0.0` and the
+  suppliers are simply listed cheapest-first as context for the reviewer. Result
+  action: `flag_for_approval`.
+- **Duplicate invoice** → `_evaluate_duplicate`. The LLM is asked whether the pair
+  looks like an innocent billing error or possible fraud. The fallback rule, if
+  the model is down, is "≤30 days apart = HIGH risk, otherwise MEDIUM." Result
+  action: `flag_duplicate`.
 
-  _evaluate_stockout(condition, suppliers, llm)
-    Step 1 (rule):
-      filter suppliers where availability=True AND sku_id in catalog
-      score = reliability_score / lead_days    (formula from tests/scenario_runner.py)
-      sort descending → ranked_options
-
-    Step 2 (LLM call):
-      SYSTEM: "You are a procurement agent. Return JSON only:
-               {recommended_supplier_id, confidence, reasoning}"
-      USER:   "SKU: {sku_id} ({name})
-               Stock: {current_stock} | Reorder: {reorder_point} | Days left: {days_remaining}
-               Ranked suppliers:
-               {json(ranked_options)}
-               Which supplier should we order from and why?
-               Consider lead time vs reliability vs price."
-      → llm_reasoning (str), confidence (float)
-    Fallback:   top rule-based score wins, llm_reasoning="fallback: ollama_unavailable"
-
-    Output: EvaluatedItem(ranked_options, best_option=top_scorer, llm_reasoning, confidence)
-
-  _evaluate_price_spike(condition, suppliers, llm)
-    Rule:        rank by price ascending (informational context for human reviewer)
-    LLM call:    none (price spikes always go to human — confidence hardcoded to 0.0)
-    Output:      EvaluatedItem(ranked_options, confidence=0.0)
-
-  _evaluate_duplicate(condition, llm)
-    LLM call:
-      SYSTEM: "You are a financial auditor. Return JSON only:
-               {risk_level: HIGH|MEDIUM|LOW, confidence, fraud_likelihood, reasoning}"
-      USER:   "Duplicate invoice pairs:
-               {json(pairs)}
-               Are these billing errors or potential fraud?"
-    confidence:  1.0 if risk_level=HIGH,  0.7 if MEDIUM
-    Output:      EvaluatedItem(best_option={action:"flag"}, llm_reasoning, confidence)
-
-API calls:  GET /api/suppliers/{id}/quote  (to get live quotes for stockout evaluation)
-LLM:        ✓ stockout evaluation + duplicate risk assessment
-
-Output:     ctx.evaluated_items[]  (one per detected condition)
-```
+**Output:** `evaluated[]` — one item per condition, each carrying the original
+condition, the chosen action, ranked suppliers, a confidence number, and the
+reasoning text.
 
 ---
 
-## Stage 4 — Decide (`pipeline/stages/decide.py`) ◄ LLM
+## Stage 4 — Decide (`pipeline/nodes/decide.py`) · LLM
+
+**Job:** commit each evaluated item to a concrete decision and, crucially,
+enforce the money safeguard that the LLM is not allowed to talk its way around.
+
+The financial limit is a single environment-tunable constant:
 
 ```
-Role: Convert evaluated items into concrete decisions.
-      LLM provides action recommendation + confidence + reasoning.
-      Code enforces financial safeguards — LLM cannot override these.
-
-Financial safeguards (hard-wired constants):
-  MAX_AUTO_APPROVE_USD = $5,000   (single PO ceiling)
-  MAX_DAILY_SPEND_USD  = $15,000  (aggregate per run)
-
-Functions
-─────────
-run(ctx, client, llm) → PipelineContext
-
-  _decide_for_item(item, accumulated_spend, llm)
-    LLM call:
-      SYSTEM: "You are an autonomous procurement agent. Return JSON only:
-               {action, confidence, reasoning, requires_human}
-               Allowed actions: generate_po | flag_for_approval |
-                                flag_duplicate | escalate | no_action
-               You MUST follow: price spikes >18% need human approval.
-                                Duplicates always require human review.
-                                No auto-approve above $5,000."
-      USER:   "Condition: {json(condition)}
-               Evaluated options: {json(evaluated_item)}
-               Accumulated spend this run: ${accumulated_spend}"
-      → action, confidence, reasoning, requires_human (from LLM)
-
-    Code overrides (always applied after LLM response):
-      type=duplicate_invoice      → requires_human = True  (always)
-      type=price_spike            → requires_human = True  (always)
-      best_option is None         → action = "escalate"
-      po_total > $5,000           → requires_human = True
-      accumulated_spend > $15,000 → requires_human = True
-
-    Fallback (Ollama unreachable):
-      duplicate_invoice  → flag_duplicate,      requires_human=True
-      price_spike        → flag_for_approval,   requires_human=True
-      stockout           → generate_po,         auto_approved if spend OK
-      no supplier        → escalate,            requires_human=True
-
-  _compute_order_qty(condition)
-    qty = max_stock - current_stock
-    fallback: 2 × reorder_point if max_stock not set
-
-API calls:  none
-LLM:        ✓ action + confidence + reasoning per decision
-
-Output:     ctx.decisions[]
+MAX_AUTO_USD = float(os.getenv("MAX_AUTO_USD", "5000"))   # one-PO auto-approve ceiling
 ```
+
+There is no separate daily/aggregate cap in the code — the only ceiling is this
+per-PO limit. The decision logic is:
+
+- **Duplicate invoice** → `flag_duplicate`, `requires_human = True`. No LLM call.
+- **Price spike** → `flag_for_approval`, `requires_human = True`, confidence `0.0`.
+  No LLM call.
+- **No available supplier** → `escalate`, `requires_human = True`.
+- **Stockout with a supplier** → the LLM is asked for an action, confidence, and
+  reasoning. Then the safeguard is applied on top of whatever the LLM said:
+  **if the PO total exceeds `MAX_AUTO_USD`, `requires_human` is forced to `True`
+  and cannot be overridden.** If the LLM is unreachable, a rule-based fallback
+  still produces a `generate_po` decision and applies the same money check.
+
+So `auto_approved` is only ever `True` for a stockout PO that comes in under the
+limit; everything else is routed to a human. **Output:** `decisions[]`.
 
 ---
 
-## Approval Gate — `shared/approvals.py`
+## Stage 5 — Act (`pipeline/nodes/act.py`)
+
+**Job:** carry out the decisions. Anything that needs a human is parked in the
+approval queue with its paperwork already filled in; anything auto-approved is
+executed (or simulated, in dry-run mode).
 
 ```
-Runs between Stage 4 and Stage 5.
-Blocks for decisions where requires_human=True.
-Presents LLM reasoning from Stages 3 & 4 to the human reviewer.
+node(state) -> dict, for each decision:
 
-Class:    ApprovalGate(mode="console" | "auto_approve" | "auto_reject" | "webhook")
+  not auto_approved
+    -> _queue_for_approval(decision)         # POST /api/approvals
+       The full PO payload is pre-built and stored on the queue item now, so the
+       later "approve" click can execute it directly with no second LLM call.
+       status: "pending_human_review"
 
-Methods
-───────
-request_approval(decision) → ApprovalResult(approved, reviewer, notes, timestamp)
+  auto_approved + generate_po
+    -> if DRY_RUN (default true): status "dry_run", nothing is written
+       else: POST /api/purchase-orders via api._post_purchase_order(payload)
 
-  _console_prompt(decision)
-    Prints:
-      ┌─────────────────────────────────────────────────────┐
-      │ APPROVAL REQUIRED                                   │
-      │ Action:  flag_for_approval                          │
-      │ SKU:     SKU-003 (Steel Rods 10mm)                  │
-      │ Reason:  Price spike — $13.60 is 19% above $11.40   │
-      │ LLM:     "Current quotes exceed threshold. Holding  │
-      │           purchase recommended."                    │
-      │ Options: QuickShip $15.50 | FastParts $20.00        │
-      │ Approve? [y/N] (60s timeout → N)                    │
-      └─────────────────────────────────────────────────────┘
-    Reads y/n from stdin. Timeout = 60s → auto-reject (safe default).
+  flag_duplicate / flag_for_approval / escalate
+    -> status "logged" (the flag itself lives in the audit log; no PO is written)
+```
 
-  _auto_approve(decision)
-    Used in test runs. Always approves. Reviewer = "auto_test".
+`DRY_RUN` is read from the environment (`DRY_RUN`, default `"true"`), so by
+default a run never writes a real purchase order — you opt in to live writes by
+setting `DRY_RUN=false`. **LLM:** none. **Output:** `actions[]`.
 
-  _webhook_request(decision)
-    POST to configured URL. Poll for response. Raises TimeoutError if no reply.
+---
 
-Effect:
-  approved  → decision.auto_approved = True  + metadata.approved_by, approval_notes
-  rejected  → decision.auto_approved = False + metadata.rejected_by, rejection_notes
+## How human approval works
+
+This is the part most worth being precise about, because there is **no
+`ApprovalGate` class and no `shared/approvals.py`** — those do not exist. Human
+approval is not a blocking step inside the graph at all. Instead, the `act` node
+drops items that need a human onto the `/api/approvals` queue and the run
+finishes. A person reviews and resolves them later, asynchronously, through the
+API (which `betsy.html` drives with its approve/decline buttons).
+
+```mermaid
+sequenceDiagram
+    participant Act as act node
+    participant API as server (/api/approvals)
+    participant Jenny as Jenny (betsy.html)
+    Act->>Act: decision.requires_human?
+    Act->>API: POST /api/approvals (full PO payload attached)
+    Note over Act: run continues, then ends
+    Jenny->>API: POST /api/approvals/{id}/approve
+    API->>API: execute the stored PO payload -> creates the PO
+    Jenny->>API: POST /api/approvals/{id}/reject
+    API->>API: mark resolved, no PO created
+```
+
+Because the payload is stored at queue time, approving is a direct execution of
+known data — the agent does not re-reason or re-price on approval, which keeps
+the human's decision and the eventual action perfectly in sync. The
+approve/reject endpoints and the deferred execution live in
+`server/routers/approvals.py`.
+
+---
+
+## Error handling (there is no `PipelineHalt`)
+
+The original design described a `PipelineHalt` exception that short-circuited to
+audit. That does not exist in the code. The real mechanism is simpler: **every
+node wraps its work in `try/except`, and on failure appends a short message to
+`state["errors"]` and returns empty output for its stage.** The graph then
+proceeds to the next node as normal. Because the edges are fixed and linear, a
+failure early on simply means later stages have less to work with — but the run
+always reaches `audit`, so even a broken run is recorded.
+
+---
+
+## Full data flow
+
+```mermaid
+flowchart TB
+    subgraph S1["1 · ingest"]
+        I1["GET inventory / suppliers / purchase-orders / invoices"]
+    end
+    subgraph S2["2 · detect (rules only)"]
+        D1["duplicates · price spikes · stockouts"]
+    end
+    subgraph S3["3 · evaluate · LLM"]
+        E1["rank suppliers · assess duplicate risk · list spike context"]
+    end
+    subgraph S4["4 · decide · LLM + money safeguard"]
+        DC1["pick action · force human if PO > MAX_AUTO_USD"]
+    end
+    subgraph S5["5 · act"]
+        A1["queue humans -> /api/approvals · write/auto or dry-run PO"]
+    end
+    subgraph S6["6 · audit · LLM"]
+        AU1["write plain-English run summary to /api/agent-log"]
+    end
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6
 ```
 
 ---
 
-## Stage 5 — Act (`pipeline/stages/act.py`)
+## Stage 6 — Audit (`pipeline/nodes/audit.py`) · LLM
+
+**Job:** leave a readable record of the whole run. This node always runs (it is
+the last node on the only path), so every run — clean, flagged, or partly failed
+— ends with one log entry that a non-technical reader can understand.
 
 ```
-Role: Execute only auto-approved decisions via API.
-      Decisions still requiring human sign-off are recorded but NOT executed.
-      Every API write is wrapped in try/except — failure logged, pipeline continues.
-
-Functions
-─────────
-run(ctx, client) → PipelineContext
-
-  _execute_generate_po(decision, client)
-    POST /api/purchase-orders
-      {supplier_id, sku_id, quantity, unit_price,
-       reason=decision.reason, requested_by="betsy-pipeline"}
-    PATCH /api/purchase-orders/{po_id}/status → "approved"
-    → ActionResult(success=True, api_response={po_id, …})
-    On error: ActionResult(success=False, error=str(e))  — pipeline does NOT halt
-
-  _execute_flag_duplicate(decision, client)
-    No API write (the flag lives in the audit log)
-    → ActionResult(endpoint="audit_only", success=True)
-
-  _skip_requires_human(decision)
-    Creates explicit record: action was intentionally deferred
-    → ActionResult(endpoint="pending_human_review", success=True)
-
-API calls:  POST /api/purchase-orders
-            PATCH /api/purchase-orders/{id}/status
-LLM:        none
-
-Output:     ctx.actions_taken[]
+node(state) -> dict
+  - build short summaries of conditions, decisions, and actions
+  - call_text(...) -> a 2-3 sentence plain-English narrative (LLM)
+  - api.log_decision(trigger="pipeline_run", analysis=..., decision=...,
+                     confidence=avg(decision confidences),
+                     metadata={conditions, decisions, actions, narrative})
+  - returns { report: narrative }
 ```
+
+It writes **one** consolidated entry per run via `api.log_decision(...)`; it does
+not write a separate entry per pending decision. If the LLM is unreachable,
+`call_text` returns a clearly-marked placeholder string and the structured
+metadata is still logged, so nothing is lost.
 
 ---
 
-## Stage 6 — Audit (`pipeline/stages/audit.py`) ◄ LLM
+## LLM integration summary
 
-```
-Role: Write the complete run record to /api/agent-log.
-      ALWAYS runs — even on PipelineHalt or unhandled exception.
-      LLM generates a human-readable narrative for the log.
+All LLM calls go through `shared/llm.py` at `temperature=0.1` (near-deterministic).
+`call_json` strips markdown fences and parses JSON, returning `{fallback: True}`
+on **any** failure (bad JSON or no connection); `call_text` returns a marked
+placeholder string. Every caller checks for the fallback and degrades to a rule.
 
-Functions
-─────────
-run(ctx, client, llm) → PipelineContext  [called directly from run.py even on halt]
-
-  _write_run_summary(ctx, client, llm)
-    LLM call:
-      SYSTEM: "Write a 2-3 sentence plain-English summary of this
-               procurement agent run. Be factual and concise."
-      USER:   "Conditions found: {list}
-               Decisions made: {list}
-               Actions taken: {list}
-               Final status: {ctx.final_status}"
-      → narrative (str)
-
-    POST /api/agent-log:
-      {trigger:    "pipeline_run:{run_id}",
-       analysis:   "{n} conditions: {types}",
-       decision:   "{n} decisions: {actions}",
-       confidence: avg(decision.confidence),
-       metadata:   {run_id, scenario, started_at, duration_ms,
-                    conditions[], decisions[], actions[],
-                    final_status, halt_reason,
-                    llm_narrative,
-                    financial_safeguards: {max_auto_approve, total_spend}}}
-
-  _write_pending_decisions(ctx, client)
-    For each requires_human=True decision:
-      POST /api/agent-log (separate entry for dashboard filtering)
-
-API calls:  POST /api/agent-log
-LLM:        ✓ plain-English narrative
-
-Output:     ctx.audit_written=True, ctx.final_status="completed|halted|error"
-```
-
----
-
-## Halt Path
-
-```
-Any stage raises PipelineHalt("reason", ctx)
-         │
-         ▼ (caught by run.py)
-ctx.final_status = "halted"
-ctx.halt_reason  = reason
-Stage 6 (Audit) runs with partial context
-run.py returns ctx to caller
-```
-
----
-
-## Full Data Flow
-
-```
-Trigger
-  │
-  ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Stage 1: INGEST                                                          │
-│  GET /inventory · GET /purchase-orders · GET /invoices · GET /suppliers   │
-│  → ctx.inventory · ctx.all_pos · ctx.open_pos · ctx.invoices · ctx.suppliers │
-└─────────────────────────────────┬────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Stage 2: DETECT  (rule-based, no LLM)                                   │
-│  _detect_duplicate_invoices → DetectedCondition(duplicate_invoice)        │
-│  _detect_price_spikes       → DetectedCondition(price_spike)              │
-│  _detect_stockouts          → DetectedCondition(stockout, critical|warn)  │
-│  → ctx.detected_conditions[]  ← ALL found; no short-circuit here          │
-└─────────────────────────────────┬────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Stage 3: EVALUATE  ◄── LLM                                              │
-│  For each stockout:   score suppliers (rule) + LLM explains choice        │
-│  For each price_spike: rank by price; confidence=0.0 (always human)       │
-│  For each duplicate:  LLM assesses fraud likelihood                       │
-│  → ctx.evaluated_items[]                                                  │
-└─────────────────────────────────┬────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Stage 4: DECIDE  ◄── LLM                                                │
-│  LLM → action + confidence + reasoning per item                           │
-│  Code enforces: duplicate/price_spike → requires_human                    │
-│                 PO > $5k → requires_human                                 │
-│                 daily spend > $15k → requires_human                       │
-│  → ctx.decisions[]                                                        │
-└─────────────────────────────────┬────────────────────────────────────────┘
-                                  │
-                         ┌────────▼────────┐
-                         │  APPROVAL GATE  │  ◄── human: y/n
-                         │  (between 4→5)  │
-                         │  approved  ──►  decision.auto_approved = True
-                         │  rejected  ──►  decision.auto_approved = False
-                         └────────┬────────┘
-                                  │
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Stage 5: ACT                                                             │
-│  auto_approved=True  → POST /purchase-orders, PATCH /{id}/status          │
-│  requires_human=True → ActionResult(endpoint="pending_human_review")      │
-│  → ctx.actions_taken[]                                                    │
-└─────────────────────────────────┬────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Stage 6: AUDIT  ◄── LLM  [ALWAYS RUNS]                                  │
-│  LLM → plain-English narrative                                            │
-│  POST /api/agent-log (run summary + per-decision pending entries)         │
-│  → ctx.audit_written=True · ctx.final_status                             │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## LLM Integration Summary
-
-| Stage | LLM call | Prompt goal | Fallback |
+| Stage | LLM call | What it decides | Rule-based fallback |
 |---|---|---|---|
-| 3 — Evaluate | Supplier selection (stockout) | Pick best supplier + explain tradeoff | Top rule score wins |
-| 3 — Evaluate | Duplicate risk (invoice) | Assess fraud vs billing error | confidence = 1.0 if HIGH |
-| 4 — Decide | Action + confidence + reasoning | Recommend action per condition | Hardcoded priority order |
-| 6 — Audit | Run narrative | 2-3 sentence plain-English summary | Structured JSON summary |
-
-All LLM calls use `temperature=0.1` (near-deterministic). JSON responses are `try/except` parsed.
+| 3 — Evaluate (stockout) | Best supplier + reasoning | Which supplier to order from and why | Top `reliability / lead_days` score wins |
+| 3 — Evaluate (duplicate) | Fraud vs billing error | Risk level + likelihood | ≤30 days apart = HIGH, else MEDIUM |
+| 4 — Decide (stockout) | Action + confidence | What to do; human still forced over the money limit | `generate_po`, human if over `MAX_AUTO_USD` |
+| 6 — Audit | Run narrative | 2-3 sentence plain-English summary | Marked placeholder; metadata still logged |
 
 ---
 
@@ -477,27 +339,50 @@ All LLM calls use `temperature=0.1` (near-deterministic). JSON responses are `tr
 
 ```bash
 # Install Ollama: https://ollama.com/download
-ollama pull mistral
+ollama pull llama3.1:8b
 
-# Override defaults via env vars (no code changes needed)
-export OLLAMA_BASE_URL=http://localhost:11434   # or any remote Ollama host
-export OLLAMA_MODEL=mistral                     # or llama3.1, phi3, etc.
+# Defaults (override via env vars, no code changes needed):
+#   OLLAMA_BASE_URL = http://localhost:11434
+#   OLLAMA_MODEL    = llama3.1:8b
+export OLLAMA_MODEL=llama3.1:8b
 
-# Run
-python -m pipeline.run
-python -m pipeline.run --approval-mode auto_approve   # for testing
+python -m pipeline.run                       # full run
+python -m pipeline.run --scenario stockout_warning
 ```
 
-Uses Ollama's OpenAI-compatible `/v1/chat/completions` endpoint.
-Swapping to a different OpenAI-compatible server = change `OLLAMA_BASE_URL`.
+`shared/llm.py` uses `langchain_ollama.ChatOllama`. Pointing at a different
+Ollama host or model is a matter of changing the two environment variables above.
 
 ---
 
-## Test Scenario Coverage
+## Test scenario coverage
 
-| Scenario | Detected | Evaluated | Decided | Expected |
-|---|---|---|---|---|
-| stockout_warning | stockout(critical, SKU-003) | SUP-003 score=0.920 best | generate_po, requires_human ($11,325 > $5k) | generate_po |
-| price_spike | price_spike + stockout(SKU-003) | price_spike: confidence=0.0; stockout: SUP-003 | flag_for_approval (price_spike → always human) | flag_for_approval |
-| duplicate_invoice | 3 duplicate pairs | fraud likelihood assessed | flag_duplicate × 3, requires_human | flag_duplicate |
-| supplier_oos | stockout(SKU-003); SUP-004 excluded | SUP-003 next best (SUP-004 unavailable) | generate_po with SUP-003 | generate_po |
+These are the four injectable scenarios in `scenarios/`. Each ships with an
+`expected_agent_action`, so a run can be checked against a known answer.
+
+| Scenario | Detect finds | Evaluate / Decide | Expected action |
+|---|---|---|---|
+| `stockout_warning` | stockout (critical, SKU-003) | Best supplier ranked; PO total over $5k → human | `generate_po` (held for approval) |
+| `price_spike` | price_spike on SKU-003 | confidence 0.0, always human | `flag_for_approval` |
+| `duplicate_invoice` | duplicate invoice pair(s) | LLM assesses fraud likelihood, always human | `flag_duplicate` |
+| `supplier_oos` | stockout (SKU-003); the OOS supplier is excluded | next-best available supplier chosen | `generate_po` |
+
+> **Note for maintainers:** the `price_spike` scenario describes its best quote
+> ($13.60) as "50% above" the ~$11.40 historical average, but $13.60 / $11.40 is
+> only **+19.3%** — which is *below* the code's 30% `PRICE_SPIKE_THRESHOLD`, and
+> `detect` actually computes its baseline from PO history rather than the stated
+> $11.40. Whether this scenario trips detection therefore depends on the seeded PO
+> prices. This threshold-vs-scenario mismatch is worth reconciling (lower the
+> threshold, or raise the scenario's quotes) so the expected `flag_for_approval`
+> is guaranteed.
+
+---
+
+## Why this design exists (link to the GAP analysis)
+
+The whole point of this sequential loop maps directly onto the before→after story
+in the GAP analysis (`bpm_analysis.html` / `docs/gap-analysis.md`): the AS-IS
+model is Jenny doing detect → source → approve → order → reconcile by hand over
+2–3 days; the pipeline collapses that same chain into one automated pass, while
+the money safeguard and the approval queue preserve the one human checkpoint the
+GAP's TO-BE model keeps for high-value and anomalous decisions.

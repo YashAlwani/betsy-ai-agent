@@ -1,0 +1,33 @@
+---
+title: TO-BE — Agentic procurement (after Betsy)
+---
+flowchart TB
+    subgraph B["Betsy — autonomous agent (does the routine work)"]
+        direction TB
+        B0([Runs 24/7]) --> B1["Monitor all 12 SKUs continuously"]
+        B1 --> B2["Detect stockout risk — days remaining"]
+        B2 --> B3["Query all 6 suppliers at once — under 1 second"]
+        B3 --> B4["Score suppliers: price x reliability x lead time"]
+        B4 --> B5["Draft PO + full reasoning"]
+        B5 --> B6{"Anomaly or over $5,000?"}
+        B6 -->|no| B7["Auto-send PO to supplier"]
+        B7 --> B8["Track delivery + auto-match invoice"]
+        B8 --> B9["Duplicate check + log decision + update supplier scores"]
+        B9 --> B10([Cycle done])
+    end
+    subgraph J["Jenny — oversight only"]
+        J1["Get notified: high-value or unusual PO"] --> J2["1-click approve or reject — about 5 min"]
+        J3["Review flagged invoices only"]
+        J4["Strategic dashboard &amp; supplier development"]
+    end
+    subgraph S["Suppliers"]
+        S1["Receive automated PO"] --> S2["Ship + send invoice"]
+    end
+    subgraph F["Finance"]
+        F1["Clean invoices auto-processed; exceptions escalated"]
+    end
+    B6 -->|yes| J1
+    J2 -.->|approved| B7
+    B7 -.-> S1
+    S2 -.-> B8
+    B9 -.-> F1

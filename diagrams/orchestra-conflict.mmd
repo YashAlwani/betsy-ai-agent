@@ -1,0 +1,11 @@
+---
+title: Orchestra — how clashing findings are resolved
+---
+flowchart TB
+    A{"Two findings on the same item?"}
+    A -->|no| K["Act on the single finding"]
+    A -->|yes| B{"Which pair?"}
+    B -->|"duplicate invoice + stockout"| D1["Duplicate wins —<br/>block the order until the invoice is checked"]
+    B -->|"price spike + stockout"| D2["Price spike wins —<br/>send to a human, do not auto-order"]
+    B -->|"supplier unavailable + stockout"| D3["Stockout wins —<br/>order from the next-best available supplier"]
+    B -->|"no rule for this pair"| D4["Ask the AI; if it is unsure,<br/>the more severe finding wins"]

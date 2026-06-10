@@ -1,0 +1,31 @@
+---
+title: AS-IS — Manual procurement (before Betsy)
+---
+flowchart TB
+    subgraph J["Ops Manager — Jenny (does almost everything)"]
+        direction TB
+        J0([Weekly start]) --> J1["Check ERP &amp; inventory by hand"]
+        J1 --> J2["Spot low stock — reactive, often too late"]
+        J2 --> J3["Email 3+ suppliers for quotes"]
+        J3 --> J4["Wait 1–2 days for replies — bottleneck"]
+        J4 --> J5["Compare quotes in a spreadsheet"]
+        J5 --> J6{"Price &amp; availability OK?"}
+        J6 -->|no| J3
+        J6 -->|yes| J7["Draft purchase order"]
+        J7 --> J8["Wait for manager sign-off — 1–2 days"]
+        J8 --> J9["Email PO to supplier"]
+        J9 --> J10["Chase delivery by phone/email — 5–8 hrs/week"]
+        J10 --> J11["Confirm receipt &amp; update stock"]
+        J11 --> J12([Done])
+    end
+    subgraph S["Suppliers"]
+        S1["Receive quote request"] --> S2["Send quote + lead time"]
+        S3["Receive PO"] --> S4["Ship order + send invoice"]
+    end
+    subgraph F["Finance"]
+        F1["Match invoice to PO by hand; ad-hoc duplicate check — errors slip through"] --> F2([Pay or flag])
+    end
+    J3 -.-> S1
+    S2 -.-> J4
+    J9 -.-> S3
+    S4 -.-> F1

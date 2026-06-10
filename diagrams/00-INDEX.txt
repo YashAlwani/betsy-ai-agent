@@ -1,0 +1,97 @@
+====================================================================
+ BETSY — DIAGRAM INDEX (what each picture shows)
+====================================================================
+
+This folder holds the diagrams used by Betsy's design documents.
+Each one is a Mermaid file (.mmd) — a small text file that describes a
+picture. To see the actual picture, open the .mmd file in any Mermaid
+viewer: paste it into https://mermaid.live, view it on GitHub, or open it
+in a code editor with a Mermaid preview.
+
+Every entry below says, in plain words, what the diagram shows, which
+document it belongs to, and where the matching code lives.
+
+--------------------------------------------------------------------
+ PIPELINE  (Betsy's simple, one-step-after-another agent)
+--------------------------------------------------------------------
+
+pipeline-overview.mmd
+  The six steps of one pipeline run, shown left to right:
+  ingest -> detect -> evaluate -> decide -> act -> audit. Also shows that
+  anything needing a person is parked in the approvals queue.
+  Document: docs/pipeline-architecture.txt
+  Code:     pipeline/graph.py
+
+pipeline-dataflow.mmd
+  The same six steps stacked top to bottom, with a one-line note on what
+  each step actually does to the data.
+  Document: docs/pipeline-architecture.txt
+  Code:     pipeline/nodes/ (ingest, detect, evaluate, decide, act, audit)
+
+pipeline-approval.mmd
+  How the human checkpoint works: the agent drops a ready-to-go purchase
+  order into the approvals queue, the run finishes, and Jenny approves or
+  rejects it later from her screen.
+  Document: docs/pipeline-architecture.txt
+  Code:     pipeline/nodes/act.py, server/routers/approvals.py
+
+--------------------------------------------------------------------
+ ORCHESTRA  (Betsy's advanced agent — several specialists at once)
+--------------------------------------------------------------------
+
+orchestra-overview.mmd
+  The five steps of an orchestra run, with the three specialists
+  (Inventory Monitor, Supplier Scout, Invoice Auditor) running together.
+  Document: docs/orchestra-architecture.txt · Code: orchestra/graph.py
+
+orchestra-conflict.mmd
+  How Betsy settles it when two findings clash on the same item — the
+  fixed precedence rules that decide which concern wins.
+  Document: docs/orchestra-architecture.txt · Code: orchestra/graph.py
+
+--------------------------------------------------------------------
+ WHOLE SYSTEM  (how all the parts fit together)
+--------------------------------------------------------------------
+
+system-c4-container.mmd
+  A C4-style container view: the people (Jenny, Finance), the outside
+  parties (Suppliers, the local AI), and every part inside Betsy
+  (dashboards, server, database, scheduler, notifier, both agents).
+  Document: README / system overview · Code: server/, orchestra/, pipeline/
+
+--------------------------------------------------------------------
+ GAP ANALYSIS  (how the work changes, before vs after Betsy)
+--------------------------------------------------------------------
+
+These come from the styled report bpm_analysis.html, redrawn as diagrams
+so they can be reused as images across the decision logs and the project.
+
+gap-as-is.mmd
+  BEFORE: the manual procurement process, drawn as swimlanes (Jenny,
+  Suppliers, Finance). Shows every hand-off, wait, and bottleneck.
+  Document: docs/gap-analysis.txt · Source: bpm_analysis.html
+
+gap-to-be.mmd
+  AFTER: the same process with Betsy doing the routine work and Jenny
+  stepping in only for high-value or unusual decisions.
+  Document: docs/gap-analysis.txt · Source: bpm_analysis.html
+
+gap-scenario-stockout.mmd
+  One concrete before/after: a near stockout on SKU-003 Steel Rods.
+  Document: docs/gap-analysis.txt · Code: scenarios/stockout_warning.json
+
+gap-scenario-duplicate-invoice.mmd
+  One concrete before/after: catching a duplicate $1,470 invoice.
+  Document: docs/gap-analysis.txt · Code: scenarios/duplicate_invoice.json
+
+gap-scenario-price-spike.mmd
+  One concrete before/after: escalating an unusual price jump.
+  Document: docs/gap-analysis.txt · Code: scenarios/price_spike.json
+
+--------------------------------------------------------------------
+ OTHER DESIGN DOCS
+--------------------------------------------------------------------
+
+Diagrams for the remaining design docs (the two-surface API control
+layer, the wireframes, and the user requirements) are added here as those
+documents are rewritten in this same plain format.

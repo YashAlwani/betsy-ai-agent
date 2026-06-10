@@ -1,0 +1,18 @@
+---
+title: Two screens, one server behind them
+---
+flowchart TB
+    jenny["Jenny"]
+    dev["Developer / demo"]
+    jenny --> B["Betsy dashboard&nbsp;(betsy.html)<br/>plain-English narrative + approval cards"]
+    dev --> I["Dev dashboard&nbsp;(index.html)<br/>raw inventory, suppliers, POs, invoices, log"]
+    B <-->|HTTP JSON, refreshes every 5s| API["Server&nbsp;(FastAPI, port 8000)"]
+    I <-->|HTTP JSON, refreshes every 5s| API
+    API <-->|saves & loads| DB[("SQLite<br/>agent log + approval queue")]
+    AG["Betsy agent<br/>(pipeline or orchestra)"] -->|reads data, posts orders & log| API
+    classDef ui fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a;
+    classDef srv fill:#438dd5,color:#ffffff,stroke:#3a7cbf;
+    classDef person fill:#08427b,color:#ffffff,stroke:#073b6f;
+    class B,I ui;
+    class API,DB,AG srv;
+    class jenny,dev person;

@@ -1,0 +1,17 @@
+---
+title: Orchestra — how one run flows
+---
+flowchart TB
+    T([Trigger]) --> BB["build_brief<br/>fetch all data once, share it with everyone"]
+    BB --> PA
+    subgraph PA["parallel_analysis — 3 specialists at the same time"]
+        direction LR
+        IM["Inventory Monitor<br/>finds stockout risks"]
+        SS["Supplier Scout<br/>finds price spikes &amp; unavailable suppliers"]
+        IA["Invoice Auditor<br/>finds duplicate invoices"]
+    end
+    PA --> OR["orchestrate<br/>group findings by item, resolve clashes, decide"]
+    OR --> EX["execute<br/>PO Manager places the approved orders"]
+    EX --> AU["audit<br/>Decision Logger writes the record"]
+    AU --> Z([done])
+    OR -. "anything needing a human" .-> Q[("/api/approvals queue")]

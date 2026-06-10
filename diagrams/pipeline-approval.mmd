@@ -1,0 +1,11 @@
+sequenceDiagram
+    participant Act as act step
+    participant API as server (/api/approvals)
+    participant Jenny as Jenny (betsy.html)
+    Act->>Act: does this decision need a human?
+    Act->>API: POST /api/approvals (full purchase order attached)
+    Note over Act: the run keeps going, then finishes
+    Jenny->>API: POST /api/approvals/{id}/approve
+    API->>API: run the saved purchase order -> creates the PO
+    Jenny->>API: POST /api/approvals/{id}/reject
+    API->>API: mark it resolved, no PO created

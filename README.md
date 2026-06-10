@@ -30,6 +30,60 @@ Any decision above the $5,000 autonomous spending limit is held in an approval q
 
 ---
 
+## Architecture at a glance
+
+Who uses Betsy, and the parts inside it (a C4-style container view):
+
+```mermaid
+flowchart TB
+    jenny["Jenny<br/><i>Operations manager</i>"]
+    finance["Finance<br/><i>person</i>"]
+    suppliers["Suppliers<br/><i>external</i>"]
+    ollama["Ollama — local AI<br/><i>llama3.1:8b</i>"]
+
+    subgraph BETSY["Betsy &nbsp;[ software system ]"]
+        direction TB
+        betsyUI["Betsy dashboard<br/><i>betsy.html</i>"]
+        devUI["Dev dashboard<br/><i>index.html</i>"]
+        api["Server<br/><i>FastAPI</i>"]
+        db[("Database<br/><i>SQLite</i>")]
+        scheduler["Scheduler<br/><i>APScheduler</i>"]
+        notifier["Notifier<br/><i>plyer + email</i>"]
+        pipeline["Pipeline agent<br/><i>LangGraph</i>"]
+        orchestra["Orchestra agent<br/><i>LangGraph</i>"]
+    end
+
+    jenny --> betsyUI
+    finance --> devUI
+    betsyUI <--> api
+    devUI <--> api
+    api <--> db
+    scheduler --> pipeline
+    pipeline --> api
+    orchestra --> api
+    pipeline --> ollama
+    orchestra --> ollama
+    api --> notifier
+    notifier --> jenny
+    pipeline -.->|orders| suppliers
+
+    classDef person fill:#08427b,color:#fff,stroke:#073b6f;
+    classDef ext fill:#8a8a8a,color:#fff,stroke:#6b6b6b;
+    classDef container fill:#438dd5,color:#fff,stroke:#3a7cbf;
+    class jenny,finance person;
+    class suppliers,ollama ext;
+    class betsyUI,devUI,api,db,scheduler,notifier,pipeline,orchestra container;
+```
+
+Plain-English design docs (with diagrams) live in `docs/` and `pdf_exports/design/`:
+[gap-analysis](docs/gap-analysis.txt) (the before→after case for Betsy),
+[pipeline-architecture](docs/pipeline-architecture.txt),
+[orchestra-architecture](docs/orchestra-architecture.txt), and
+[api-control-layer](docs/api-control-layer.txt). All diagrams are in `diagrams/`
+(see [`diagrams/00-INDEX.txt`](diagrams/00-INDEX.txt)).
+
+---
+
 ## Setup
 
 **Prerequisites:** Python 3.11+, [Ollama](https://ollama.ai) running locally with `llama3.1:8b` pulled.
@@ -80,7 +134,7 @@ betsy-ai-agent/
 │   ├── test_ema_learning.py           EMA formula verification
 │   └── test_long_term_learning.py     Integration test — 2 LLM runs, 8 delivery rounds
 ├── docs/                    Architecture docs, API spec, test reports
-├── decision_logs/           7 decision logs documenting every major build choice
+├── decision_logs/           8 decision logs documenting every major build choice
 └── run_server.py            Startup script
 ```
 
@@ -111,7 +165,7 @@ A supplier who delivers 8 days late repeatedly drops from a 0.92 score to 0.44 o
 
 ## Decision logs
 
-Seven decision logs in `decision_logs/` document every major choice made during the build — framework selection, architecture tradeoffs, UI design rationale, the HITL approval flow, persistence strategy, and the learning mechanism. Each log follows the DOT framework research format used in the ICT bachelor programme.
+Eight decision logs in `decision_logs/` document every major choice made during the build — framework selection, architecture tradeoffs, UI design rationale, the HITL approval flow, persistence strategy, the learning mechanism, and notifications. Each log follows the DOT framework research format used in the ICT bachelor programme.
 
 | Log | What it covers |
 |---|---|
@@ -122,6 +176,7 @@ Seven decision logs in `decision_logs/` document every major choice made during 
 | DL-05 | HITL approval queue end-to-end |
 | DL-06 | SQLite persistence, EMA learning, APScheduler |
 | DL-07 | Proving that score learning changes decisions |
+| DL-08 | Desktop + email notifications |
 
 ---
 
