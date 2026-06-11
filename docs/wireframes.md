@@ -1,154 +1,150 @@
 # Betsy — Wireframes
 
-Two design directions explored. The first is a standalone dashboard for Jenny.
-The second (current direction) follows enterprise AI tool patterns — AI as a layer on top of familiar data surfaces.
+Two design directions were explored. The first is a standalone dashboard for
+Jenny, drawn as four screens. The second — the chosen direction — follows
+enterprise AI tool patterns, where the AI sits as a layer on top of the
+familiar data, on a single page.
+
+The wireframes are authored as plain text with **wiremd** and rendered to PNGs
+in `diagrams/`. To regenerate them after an edit:
+
+```
+python build_wireframes.py
+```
+
+That renders each `diagrams/wireframes/*.wmd.md` source to HTML in the grayscale
+"wireframe" style, screenshots it with headless Edge, and trims the image to its
+content. Requires the global `wiremd` CLI (`npm install -g wiremd`), Pillow, and
+Microsoft Edge.
 
 ---
 
 ## Version 1 — Standalone Dashboard (4 screens)
-*Pattern: dedicated app with sidebar navigation*
 
-### Screen 1 — Home
-```
-┌─────────────────────────────────────────────────────────────┐
-│  🤖 Betsy                              Last checked: 2m ago  │
-│  "I'm keeping an eye on things."                            │
-├──────────────┬──────────────┬──────────────────────────────-┤
-│  ⚠️  1        │  ✅  3        │  🚨  0                        │
-│  Need your   │  Handled     │  Critical                     │
-│  approval    │  automatically│  alerts                      │
-│  [Review →]  │              │                               │
-├──────────────┴──────────────┴───────────────────────────────┤
-│  RECENT ACTIVITY                                            │
-│  ─────────────────────────────────────────────────────────  │
-│  ✅ Ordered 500x Steel Bolts M8 from FastParts Co.  3h ago  │
-│  ✅ Ordered 200x Hydraulic Seals from QuickShip     6h ago  │
-│  ⚠️  Price spike on Copper Wire — waiting for you   8h ago  │
-└─────────────────────────────────────────────────────────────┘
-```
+*Pattern: a dedicated app Jenny opens on its own.*
 
-### Screen 2 — Pending Approvals (HITL core)
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ← Back       YOUR APPROVAL NEEDED        1 item            │
-├─────────────────────────────────────────────────────────────┤
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  ⚠️  Copper Wire — price looks unusual                │  │
-│  │                                                       │  │
-│  │  What's happening                                     │  │
-│  │  The usual price is €4.20/m. Today all suppliers     │  │
-│  │  are quoting €6.80–€7.10/m — 60% higher than normal.│  │
-│  │                                                       │  │
-│  │  What I'd normally do                                 │  │
-│  │  Order 300m from BulkSupply Co. for €2,040 total.   │  │
-│  │                                                       │  │
-│  │  Why I'm asking you instead                          │  │
-│  │  This kind of jump usually means a market issue or  │  │
-│  │  a data error. You know better than I do.           │  │
-│  │                                                       │  │
-│  │  Betsy's confidence: ████░░░░  55%                  │  │
-│  │                                                       │  │
-│  │  [  ✅ Yes, go ahead  ]    [  ❌ No, skip this  ]   │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+Four screens she moves between — Home, Pending approval, Agent log, and the
+Supplier scoreboard. It reads cleanly, but it is a separate app she has to learn
+and keep open alongside everything else she already uses. That is why it was not
+the chosen direction.
 
-### Screen 3 — Agent Log
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ← Back       WHAT BETSY DID                 Last 7 days    │
-├─────────────────────────────────────────────────────────────┤
-│  Today                                                      │
-│  ─────────────────────────────────────────────────────────  │
-│  ✅  10:14   Ordered Steel Bolts M8                        │
-│              500 units · FastParts Co. · €90               │
-│              "Stock was running low (2 days left)."  [+]   │
-│                                                             │
-│  ⚠️  08:30   Flagged for your review — Copper Wire         │
-│              Price 60% above normal · Waiting on you  [+]  │
-│                                                             │
-│  Yesterday                                                  │
-│  ─────────────────────────────────────────────────────────  │
-│  ✅  16:02   Ordered Hydraulic Seals                       │
-│  🔴  14:55   Flagged duplicate invoice — INV-2024-0291     │
-└─────────────────────────────────────────────────────────────┘
-```
+Rendered wireframe: `diagrams/wireframe-betsy-standalone.png`
 
-### Screen 4 — Supplier Scoreboard
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ← Back       SUPPLIERS                                     │
-├─────────────────────────────────────────────────────────────┤
-│  SUPPLIER            TRACK RECORD    SPEED     LAST ORDER   │
-│  ─────────────────────────────────────────────────────────  │
-│  FastParts Co.       ●●●●○  Good     2 days    3h ago       │
-│  QuickShip Express   ●●●●●  Great    1 day     Yesterday    │
-│  BulkSupply Co.      ●●●○○  OK       5 days    2 weeks ago  │
-│  PrecisionParts      ●●●●○  Good     3 days    ⚠️ Invoice!   │
-│  ValueFirst          ●●○○○  Slow     7 days    1 month ago  │
-└─────────────────────────────────────────────────────────────┘
+Source (`diagrams/wireframes/betsy-standalone.wmd.md`):
+
+```wiremd
+# Version 1 — Standalone Dashboard
+
+## Screen 1 — Home {.grid-3}
+
+### 1
+Needs your approval
+[Review]*
+
+### 3
+Handled automatically
+
+### 0
+Critical alerts
+
+## Recent activity
+
+- Ordered 500 × Steel Bolts M8 — FastParts Co.
+- Ordered 200 × Hydraulic Seals — QuickShip
+- Price spike on Copper Wire — waiting for you
+
+## Screen 2 — Pending approval
+
+**Copper Wire — price looks unusual**
+
+The usual price is €4.20/m. Today every supplier quotes €6.80–7.10/m — about 60%
+higher than normal. I'd normally order 300 m from BulkSupply Co. for €2,040. I'm
+asking you because a jump like this usually means a market issue or a data error.
+
+Confidence: low
+
+[Yes, go ahead]* [No, skip this]
+
+## Screen 3 — Agent log
+
+**Today**
+
+- 10:14 — Ordered Steel Bolts M8 · 500 units · FastParts Co. · €90
+- 08:30 — Flagged Copper Wire for review · price 60% above normal
+
+**Yesterday**
+
+- 16:02 — Ordered Hydraulic Seals · QuickShip
+- 14:55 — Flagged duplicate invoice · INV-2024-0291
+
+## Screen 4 — Supplier scoreboard
+
+| Supplier | Track record | Speed | Last order |
+|---|---|---|---|
+| QuickShip Express | ●●●●● | 1 day | Yesterday |
+| FastParts Co. | ●●●●○ | 2 days | 3h ago |
+| BulkSupply Co. | ●●●○○ | 5 days | 2 weeks ago |
+| PrecisionParts | ●●●●○ | 3 days | Invoice flag |
+| ValueFirst | ●●○○○ | 7 days | 1 month ago |
 ```
 
 ---
 
-## Version 2 — Enterprise AI Layer (current direction)
-*Pattern: AI as a layer on top of familiar data surfaces*
-*References: Salesforce Einstein, Microsoft Copilot, Tableau Pulse, Glean*
+## Version 2 — Enterprise AI Layer (chosen direction)
 
-Key patterns used:
-- **AI command bar** — ⌘K prompt at the top for natural language input
-- **AI narrative** — auto-generated plain English summary of current state
-- **AI-scored tables** — data tables with one ✦-marked AI column
-- **Inline approvals** — HITL cards embedded in the same surface, not a separate app
+*Pattern: AI as a layer on top of familiar data surfaces.*
+*References: Salesforce Einstein, Microsoft Copilot, Tableau Pulse, Glean.*
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  ✦ Betsy           [⌘K  Ask Betsy something...]          ● Active      │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │ ✦ AI SUMMARY                                        2 min ago    │ │
-│  │                                                                   │ │
-│  │ "Steel Bolts and Hydraulic Seals were both critically low.        │ │
-│  │  I ordered both automatically. Copper Wire pricing is 60%        │ │
-│  │  above normal — I flagged it for you rather than ordering."      │ │
-│  │                                                                   │ │
-│  │ [✋ Review Copper Wire]   [📋 View full log]                     │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-│                                                                         │
-│  Quick actions:  [⚡ Restock critical]  [🔍 Check invoices]  [📊 Report]│
-│                                                                         │
-│  INVENTORY                                            ✦ AI Risk column │
-│  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  Item                 Stock     Days left   ✦ Risk      Action   │ │
-│  │  ───────────────────────────────────────────────────────────────  │ │
-│  │  Steel Bolts M8       240 pcs   2 days      ● Critical  Ordered  │ │
-│  │  Hydraulic Seals      15 pcs    1 day       ● Critical  Ordered  │ │
-│  │  Copper Wire          890 m     7 days      ◐ Watch     Flagged  │ │
-│  │  Aluminium Sheet      3200 pcs  26 days     ○ Good      —        │ │
-│  │  O-Ring Seals         5500 pcs  45 days     ○ Good      —        │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-│                                                                         │
-│  SUPPLIERS                                         ✦ Betsy Score column │
-│  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  Supplier             ✦ Score      Speed    Last used   Status   │ │
-│  │  ───────────────────────────────────────────────────────────────  │ │
-│  │  QuickShip Express    ●●●●●        1 day    Today       ✓ Good   │ │
-│  │  FastParts Co.        ●●●●○        2 days   Today       ✓ Good   │ │
-│  │  PrecisionParts       ●●●●○        3 days   2w ago      ⚠ Invoice│ │
-│  │  BulkSupply Co.       ●●●○○        5 days   2w ago      ✓ Good   │ │
-│  │  ValueFirst           ●●○○○        7 days   1m ago      ✓ OK     │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-│                                                                         │
-│  NEEDS YOUR OK  (1 pending)                                             │
-│  ┌───────────────────────────────────────────────────────────────────┐ │
-│  │  ⚠ Copper Wire · BulkSupply Co. · 300m · €2,040                 │ │
-│  │  Price is 60% above the 30-day average. Confidence: ●●○○○       │ │
-│  │  "All suppliers are quoting unusually high. Could be a market    │ │
-│  │   spike — you know better than I do."                            │ │
-│  │  [✅ Yes, go ahead]    [❌ Skip this]                             │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
+The whole surface on one page: a command bar to ask Betsy something, a
+plain-English summary of what Betsy just did, the procurement tables Jenny
+already recognises with Betsy's read added as columns, and the approval ("Needs
+your OK") card inline rather than in a separate app. The patterns used:
+
+- **AI command bar** — a prompt at the top for natural-language input.
+- **AI narrative** — an auto-generated, plain-English summary of the state.
+- **AI-scored tables** — familiar tables with the AI's read added as columns.
+- **Inline approvals** — the human decision lives in the same surface.
+
+Rendered wireframe: `diagrams/wireframe-betsy-layer.png`
+
+Source (`diagrams/wireframes/betsy-layer.wmd.md`):
+
+```wiremd
+# Version 2 — Enterprise AI Layer (chosen)
+
+Ask Betsy something
+[__________________________________]{type:search}
+
+> Steel Bolts and Hydraulic Seals were low — I reordered both.
+> Copper Wire is 60% over its normal price, so I flagged it for you.
+
+[Restock critical]* [Check invoices] [View log]
+
+## Inventory
+
+| Item | Stock | Days left | Risk | Action |
+|---|---|---|---|---|
+| Steel Bolts M8 | 240 | 2 | Critical | Ordered |
+| Hydraulic Seals | 15 | 1 | Critical | Ordered |
+| Copper Wire | 890 | 7 | Watch | Flagged |
+| Aluminium Sheet | 3200 | 26 | Good | — |
+
+## Suppliers
+
+| Supplier | Betsy score | Speed | Last used | Status |
+|---|---|---|---|---|
+| QuickShip Express | ●●●●● | 1 day | Today | Good |
+| FastParts Co. | ●●●●○ | 2 days | Today | Good |
+| PrecisionParts | ●●●●○ | 3 days | 2w ago | Invoice flag |
+| BulkSupply Co. | ●●●○○ | 5 days | 2w ago | Good |
+| ValueFirst | ●●○○○ | 7 days | 1m ago | OK |
+
+## Needs your OK
+
+Copper Wire · BulkSupply Co. · 300 m · €2,040
+60% above the 30-day average.
+
+[Yes, go ahead]* [Skip this]
 ```
 
 ---
@@ -157,11 +153,11 @@ Key patterns used:
 
 | Principle | How Betsy applies it |
 |---|---|
-| AI is a layer, not a separate app | Betsy sits on top of inventory/supplier data, doesn't replace it |
-| Outputs short and actionable | Narrative is 2–3 sentences, every section has a button |
-| Clear "generated by AI" signal | ✦ mark on all AI-produced columns and cards |
-| Familiar work surfaces | Tables look like any procurement table — one column is AI |
-| Confidence visible | ●●●○○ dots on every AI-generated recommendation |
+| AI is a layer, not a separate app | Betsy sits on top of inventory/supplier data, it does not replace it |
+| Outputs short and actionable | The narrative is two or three sentences; every section has a button |
+| Clear "generated by AI" signal | AI-produced columns and cards are marked as Betsy's |
+| Familiar work surfaces | The tables look like any procurement table — Betsy adds a column |
+| Confidence visible | Every AI recommendation shows a confidence indicator |
 
 ---
 

@@ -1,64 +1,55 @@
-# Test Report — DL-05 HITL Approval Queue
-**Branch:** feat/dl05-approvals  
-**Date:** 2026-05-31  
-**Tester:** automated via curl against live server (uvicorn, port 8000)
+# Test Report — DL-05 Human-in-the-Loop Approval Queue
+
+**Branch:** feat/dl05-approvals
+**Date:** 2026-05-31
+**How it was tested:** automated calls against the live server (running on port 8000)
 
 ---
 
 ## What was tested
 
-The full approve/decline loop introduced in DL-05:
-- `GET /api/approvals` returns pending items
-- Pipeline queues `requires_human=True` decisions to `/api/approvals`
-- `POST /api/approvals/{id}/approve` creates the PO and logs `human_approved`
-- `POST /api/approvals/{id}/reject` logs `human_rejected`, no action taken
-- Guard rails: double-resolve and unknown-id are rejected cleanly
+This report checks the full approve-and-decline loop built in DL-05 — the path that turns a decision Betsy cannot make on its own into something Jenny can act on. In plain terms, the test confirms four things: that the pipeline puts a held decision into the approval queue, that approving it creates a real purchase order, that declining it records the choice and does nothing else, and that bad requests (acting on the same item twice, or on an item that does not exist) are turned away cleanly.
 
 ---
 
-## Bug found during testing
+## The bug found during testing
 
-**Root cause:** `state.reset()` included `self.approvals = []`, which was added when wiring up the reset flow. The pipeline calls `api.reset_scenario()` at the end of every run — so approvals were being queued and then immediately wiped.
+At first the queue came up empty straight after a pipeline run, even though the queuing code was correct. The cause was the reset() function: it was clearing the approval queue at the end of every run, because clearing was added by mistake when the scenario-reset flow was wired up. The pipeline resets the scenario after each run, so every approval was being queued and then wiped a moment later.
 
-**Fix:** Removed `self.approvals = []` from `reset()`. Approvals are user-facing decisions that live until Jenny acts on them — they are independent of scenario state. Committed separately: `fix: don't clear approvals on scenario reset`.
+The fix was to stop reset() from touching the approvals. Approvals are not scenario data that should be wiped between runs — they are Jenny's pending decisions, and they need to live until she acts on them. Removing that one line fixed it, and it was committed on its own so the change is easy to trace.
 
 ---
 
 ## Test results
 
+All eleven checks passed.
+
 | # | Test | Expected | Result | Pass |
 |---|------|----------|--------|------|
-| T1 | `GET /api/approvals` before any run | `[]` | `[]` | ✅ |
-| T2 | Trigger `stockout_warning` pipeline via `/api/run-agent` | `{"status":"started"}` | `{"status":"started","mode":"pipeline","scenario":"stockout_warning"}` | ✅ |
-| T3 | `GET /api/approvals` after run | 2 pending items (generate_po + flag_duplicate) | 2 items — `flag_duplicate` SKU-004 (confidence 0.7), `generate_po` SKU-003 €11,325 (confidence 1.0) | ✅ |
-| T4 | `POST /api/approvals/{id}/reject` on duplicate flag | `{"status":"rejected"}` | `{"status":"rejected"}` | ✅ |
-| T5 | `POST /api/approvals/{id}/approve` on generate_po | `{"status":"approved","po_id":"..."}` | `{"status":"approved","po_id":"PO-20260531-0E74"}` | ✅ |
-| T6 | `GET /api/approvals` after both resolved | `[]` | `[]` | ✅ |
-| T7 | PO `PO-20260531-0E74` in `/api/purchase-orders` | `requested_by: betsy-human-approved` | Present with correct fields, `status: approved` | ✅ |
-| T8 | Agent log contains `human_approved` and `human_rejected` entries | 2 entries with correct metadata | Both entries present, metadata includes `decision_id` and `po_id` | ✅ |
-| T9 | Re-approve an already-resolved item | `400` | `400` | ✅ |
-| T10 | Approve non-existent `decision_id` | `404` | `404` | ✅ |
-| T11 | `duplicate_invoice` scenario queues flag items | `flag_duplicate` items pending | 3 × `flag_duplicate` SKU-004 queued | ✅ |
-
-**11/11 passed.**
+| T1 | List approvals before any run | empty | empty | pass |
+| T2 | Trigger the stockout run | run starts | run started in pipeline mode | pass |
+| T3 | List approvals after the run | 2 pending items | flag-duplicate for SKU-004, generate-PO for SKU-003 at €11,325 | pass |
+| T4 | Decline the duplicate-invoice flag | recorded as rejected | recorded as rejected | pass |
+| T5 | Approve the generate-PO item | a new PO id returned | PO-20260531-0E74 created | pass |
+| T6 | List approvals after both are resolved | empty | empty | pass |
+| T7 | Find that PO in the orders list | marked betsy-human-approved | present, status approved | pass |
+| T8 | Agent log has the human decisions | approved + declined entries | both present, with the decision id and PO id | pass |
+| T9 | Approve an already-resolved item | refused (400) | refused (400) | pass |
+| T10 | Approve an unknown id | refused (404) | refused (404) | pass |
+| T11 | Duplicate-invoice scenario queues flags | flag items pending | 3 duplicate flags queued for SKU-004 | pass |
 
 ---
 
-## Observations
+## What the results show
 
-**PO created correctly:** The approved PO was created with `requested_by: betsy-human-approved`, distinguishing human-approved orders from auto-approved ones in the purchase orders list.
+The approved purchase order was created and marked betsy-human-approved, which keeps human-approved orders separate from ones Betsy placed on its own. Both the approve and the decline were written to the agent log with the decision id, so every human action can be traced back to the exact decision it resolved.
 
-**Agent log records the human decision:** Both `human_approved` and `human_rejected` entries appear in the agent log with the `decision_id`, making it auditable — you can trace every approval action back to the queued decision.
+The financial safeguard held. The stockout order came to €11,325, above the €5,000 limit for autonomous spending, so Betsy stopped and queued it rather than placing it. Jenny then approved it and the order went through. That is the behaviour we want: the limit blocks Betsy from acting alone on a large order, but it does not block a person from approving it.
 
-**Financial safeguard held:** The stockout_warning PO total was €11,325 (above the €5,000 auto-approve limit). The agent correctly stopped and queued it. The human approved it and the PO was created — so the safeguard is blocking auto-action but not blocking human action. That's the intended behaviour.
-
-**T11 note:** The `duplicate_invoice` scenario produced 3 pending `flag_duplicate` items for SKU-004. This is expected — the scenario injects multiple duplicate invoice pairs and the detect node finds each one independently. Not a bug.
+The last check (T11) produced three pending duplicate flags rather than one. That is expected, not a fault — the duplicate-invoice scenario seeds several matching invoice pairs, and the detect step finds each one on its own.
 
 ---
 
 ## What this enables
 
-- Jenny can now open betsy.html, see approval cards, and click "Yes, go ahead" or "Skip this"
-- Approving a `generate_po` creates the PO in real-time — visible in index.html orders tab immediately
-- Every approval/rejection is recorded in the agent log with full traceability
-- The betsy.html decision log section shows `✅ You approved` / `❌ You declined` entries after acting
+After DL-05, Jenny can open Betsy's page, see the pending approval cards, and choose "Yes, go ahead" or "Skip this". Approving a held order creates the purchase order straight away, visible in the orders view in real time. Every approval and decline is recorded in the agent log with a full trail, and the decision-log section of the page shows what she approved or declined after she acts.

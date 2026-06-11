@@ -1,0 +1,117 @@
+DL-06 — Making Memory Permanent: Persistence, Active Learning, and Autonomous Scheduling
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+DL-05 closed with a working human-in-the-loop. Approval cards appeared on @betsy, Jenny clicked approve, and a real purchase order showed up in the procurement environment in real time. That was the moment the loop closed — but every part of that loop lived in memory only. Close the laptop, restart the server, and the queue was gone. Not just the approvals: the whole agent log, every decision Betsy had ever made, all of it.
+
+Two other gaps had been sitting unaddressed since DL-02. Supplier scores never moved — the seed data gives every supplier a fixed reliability score, so PrecisionParts GmbH stays at 0.97 forever, even if it delivers late three weeks running. Betsy could not tell a supplier with an old good reputation apart from one performing well right now. And Betsy still had to be triggered by hand: every check needed someone to open the page and click run, or type a terminal command, when a real procurement system watches inventory continuously.
+
+Three gaps stacked on one another. None blocked the earlier logs, but all three had to close before Betsy could be called a real system rather than a demo that resets on every run.
+
+
+1. Research question
+
+How do I make Betsy's state survive restarts, update supplier trust scores from real delivery outcomes, and run the pipeline on a schedule — without adding deployment complexity that makes the project harder to run than it is to understand?
+
+
+2. Current LO stage
+
+[ ] Analyzing
+[ ] Advising
+[x] Designing — the persistence approach, the learning formula, and the circular-import fix
+[x] Realizing — built SQLite persistence, the score updates, the scheduler, and the stats endpoint
+[x] Managing — restart verification, formula checks against known values, scheduler health visible on the page
+
+
+3. What makes a good decision here
+
+Four things have to be true. The agent log and the pending approvals have to survive a server restart with nothing lost. The score formula has to be verifiable — given a known starting score and a known lateness, the result has to match the formula to four decimal places. The scheduler has to come up active and show the next run time within half a minute of the server starting, visible in the interface without reading any code. And the stats reading has to surface all five figures correctly: total decisions, the autonomous rate, how many approvals are waiting, the value sitting in the queue, and when the next run is due.
+
+
+4. What I decided
+
+Four pieces, built as one sprint. SQLite persistence through a new @db module using Python's built-in database support, so no new service is needed. Supplier-score updates triggered when a purchase order is delivered. An always-on scheduler that runs the pipeline on an interval. And a tiny @scheduler_instance module to solve a circular-import problem that appears once the stats endpoint needs to read the scheduler's state. The stats endpoint and the dashboard panel sit on top of all four.
+
+The diagram below shows how these fit together — the scheduler firing a run, every action writing through a lock to the database, the database restoring the state on boot, and a delivery feeding the score update.
+
+[IMAGE: diagrams/persistence-scheduler.png — How Betsy remembers: the scheduler fires a run every 30 minutes; new log entries and held approvals are written through a single lock into betsy.db; on start-up the server reads both tables back into memory; and a delivered order updates the supplier's score in place.]
+
+
+5. Why this decision
+
+Method: Designing, Lab
+
+Persistence — why SQLite.
+The project is school-scope. A database like PostgreSQL or MongoDB would mean a separate service, connection handling, more environment variables, and an extra setup step before anything runs at all. SQLite is built into Python — nothing to install, one betsy.db file at the project root that appears the first time the server starts. Its one real limit, no concurrent writes from multiple server processes, does not apply here: there is a single server worker and a single state object.
+
+All writes go through one lock in @db. The pipeline runs in a background thread while approval actions arrive from web requests, so both can try to write at once; the lock prevents corruption without the weight of connection pooling. On start-up the state loads both tables back into memory, so the log entries and approvals return exactly as they were before the restart (@state · @db). The restart test confirmed it — seven log entries and one pending approval reloaded after a hard kill and a fresh start, with nothing lost (T4 in the DL-06 test report).
+
+Learning — why a 20% weight on each delivery.
+The score is an exponential moving average over delivery performance:
+
+    new score  = 0.2 × performance + 0.8 × old score
+    performance = max(0.0, 1.0 − days late × 0.1)
+
+The 0.2 weight means a single delivery counts for a fifth and the history counts for the rest. That is moderately sharp: a supplier at 0.97 that arrives five days late drops to 0.88 in one event, and ten deliveries each ten or more days late would bring any supplier to zero. That is the right sensitivity — reputation should take time to build but erode quickly when it has to. This is the evidence-based supplier scoring the before-and-after analysis describes, where a supplier's reliability updates after each delivery outcome rather than staying a fixed guess (@bpm_analysis).
+
+The update fires in @orders the moment an order is marked delivered: the router reads the expected and actual dates, works out the lateness, and updates the supplier's score in place. Checked against PrecisionParts GmbH at a baseline of 0.97:
+
+| Event             | Lateness | Performance | Calculation             | Before | After  |
+|-------------------|----------|-------------|-------------------------|--------|--------|
+| On-time delivery  | 0 days   | 1.0         | 0.2×1.0 + 0.8×0.9700    | 0.9700 | 0.9760 |
+| 5-day late        | 5 days   | 0.5         | 0.2×0.5 + 0.8×0.9760    | 0.9760 | 0.8808 |
+
+Both match exactly. The change shows immediately in the suppliers list and in the Betsy Score column on the page.
+
+One known limit: scores are remembered only for the length of a session. The reset the pipeline runs at the end of every scenario reloads the suppliers from the seed file, returning the scores to baseline. That is deliberate — scenario testing needs a reproducible starting point. Saving learned scores to the database is a later step. What this log proves is that the learning mechanism is correct; whether those changes survive a full scenario cycle is what DL-07 tests.
+
+Scheduling — why a background thread, not the async loop.
+The pipeline is synchronous and takes 30 to 60 seconds with its model calls. Running that inside the async scheduler would freeze the server's event loop for the whole run, so no web request could be served while the pipeline was working. A background scheduler puts each run in its own thread, leaving the event loop free.
+
+The scheduler lives in its own three-line module, @scheduler_instance, rather than in @main. The reason is a real one: @stats needs to read the scheduler's next run time, and if it imported that from @main, Python would hit a circular import at start-up. The small singleton module breaks the loop cleanly. The start-up routine in @main starts the scheduler, registers the pipeline job with the chosen interval, and shuts it down on exit. The default interval is 30 minutes; setting it to one minute makes a run fire within a minute for testing, and the next-run card updates straight away.
+
+The stats panel.
+The stats reading works everything out from the current state and the scheduler at the moment it is asked — total and automatic decisions, the autonomous rate, the approvals waiting, the value in the queue, whether the scheduler is active, and the next run. The page shows these as five cards above the approvals — decisions made, autonomous rate, awaiting your OK, value in queue, next auto-run — refreshing on the same five-second poll as the rest of the dashboard (@stats).
+
+[IMAGE: decision_logs/images/dl06-stats-panel.png — The stats panel on Betsy's page: five cards — decisions made, autonomous rate, awaiting your OK, value in queue, and the next auto-run timestamp.]
+
+What I'd recommend:
+For any AI system that a non-technical person has to trust, persistence is not a nice-to-have — it is the trust layer. Jenny cannot rely on a pending $11k order if she is not sure it will still be there after the weekend. A write-through SQLite pattern — append on every action, reload on boot — is the right first persistence layer at this scale, and it grows into a bigger database later with only the connection code changing while the application logic stays the same.
+
+The full results are in the DL-06 test report: nine of nine passed, including the restart check and both score-formula checks.
+
+
+6. Does this hold up
+
+- Nothing lost on restart: yes — seven log entries and one pending approval reloaded from betsy.db after a hard server kill (T4 in the DL-06 test report).
+- The score formula is verifiable: yes — PrecisionParts GmbH moved from 0.97 to 0.9760 on time and to 0.8808 after a five-day-late delivery, both matching the formula exactly and confirmed by @test_ema_learning.
+- The scheduler is active on boot: yes — it reports active within seconds of the server starting, with the next run set.
+- The stats reading has the right shape: yes — all fields present and matching the expected values after the full test sequence (T6 in the DL-06 test report).
+
+What I assumed:
+SQLite suits this project's concurrency. That holds — one server process, infrequent writes, and the lock is never a bottleneck.
+
+What surprised me:
+The circular import. The scheduler belongs in @main conceptually, since that is where the application lifecycle lives. But @stats genuinely needs the scheduler object to read the next run time, and importing that from @main creates an import loop at start-up. The fix — a three-line singleton module — is the right pattern, but it is a non-obvious structural decision, and it is the kind of thing that quietly slows a real project down if you do not see it coming.
+
+
+7. What this unlocks
+
+Next LO stage: Managing — confirming that score changes have real downstream effects on procurement decisions, not just that the numbers update (DL-07)
+
+What I can now do:
+Start the server, leave it running, and Betsy scans inventory and queues approvals every 30 minutes with no terminal interaction. Mark an order delivered and watch the supplier's score update immediately in the Betsy Score column. Restart the server and open @betsy to find the approval queue and agent log exactly where they were. Jenny can close her laptop.
+
+Ongoing monitoring:
+The stats panel is the health check. An active scheduler means it is alive; an advancing next-run means jobs are firing. If the value in the queue grows without the human-decision count rising, approvals are piling up unresolved — the signal to open the page and clear them. An autonomous rate of 0% here is correct: every test scenario involves a high-value order that exceeds the $5,000 limit and correctly escalates.
+
+How I'll know this worked:
+Start the server cold, check the stats, and confirm the scheduler is active with a next run set. Kill the server, restart it, open @betsy — the approval queue and agent log should be identical to before. That continuity is the proof that memory is no longer fragile.
+
+
+Files: server/db.py, server/scheduler_instance.py, server/routers/stats.py, server/state.py, server/main.py, server/routers/orders.py, tests/test_ema_learning.py
+Diagrams: diagrams/persistence-scheduler.png
+Source: bpm_analysis.html, docs/test-report-dl06.md
+LO stages: Designing, Realizing, Managing

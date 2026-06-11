@@ -1,0 +1,29 @@
+---
+title: Betsy — How delivery history flips the shortlist for SKU-003 (DL-07)
+---
+flowchart LR
+    subgraph R1["Run 1 — shortlist for SKU-003"]
+        direction TB
+        q1["1st  QuickShip<br/><i>composite 0.920</i><br/>0.92 reliability, 1-day lead"]
+        f1["2nd  FastParts<br/><i>composite 0.475</i><br/>0.95 reliability, 2-day lead"]
+    end
+    subgraph MID["8 delivery rounds in between"]
+        direction TB
+        ev1["QuickShip: 5 deliveries,<br/>each 8 days late<br/><b>0.92 &rarr; 0.44</b>"]
+        ev2["FastParts: 3 deliveries,<br/>all on time<br/><b>0.95 &rarr; 0.97</b>"]
+    end
+    subgraph R2["Run 2 — same stockout, new shortlist"]
+        direction TB
+        f2["1st  FastParts<br/><i>composite 0.487</i>"]
+        q2["2nd  QuickShip<br/><i>composite 0.436</i>"]
+    end
+    R1 --> MID --> R2
+    q1 -.->|score falls| q2
+    f1 -.->|score rises| f2
+
+    classDef win fill:#dcfce7,color:#14532d,stroke:#86efac;
+    classDef lose fill:#fee2e2,color:#7f1d1d,stroke:#fca5a5;
+    classDef ev fill:#eaf2fb,color:#0f3460,stroke:#9cc3e6;
+    class q1,f2 win;
+    class f1,q2 lose;
+    class ev1,ev2 ev;
