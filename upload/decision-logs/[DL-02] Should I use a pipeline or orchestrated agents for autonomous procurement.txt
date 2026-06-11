@@ -1,0 +1,108 @@
+DL-02 — Pipeline vs Orchestra: Choosing the Agent Architecture
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+Project: Betsy — Autonomous Procurement Agent / ICT Bachelor Research Project, Phase 1 → Phase 2
+
+Why this matters right now:
+DL-01 left a clear gap. The environment exists and the dashboard shows the whole problem, but nothing connects inventory state to supplier selection to a purchase order. This log is where the framework and the architecture get decided. Get it wrong here and the entire decision loop has to be rebuilt later, so this is the decision the rest of the project leans on.
+
+Where this fits:
+This follows directly from DL-01 and unlocks Phase 2 — the core autonomous loop. Everything that comes after it (memory, learning, edge-case handling) sits on top of whatever pattern is chosen here.
+
+
+1. Research question
+
+What autonomous agent framework and architecture pattern lets Betsy make multi-step procurement decisions, resolve conflicting findings, and keep financial safeguards that the model cannot reason its way around?
+
+
+2. Current LO stage
+
+[x] Analyzing — compared LangGraph, AutoGen, CrewAI, and n8n against the procurement requirements
+[x] Advising — recommended starting with the Pipeline and only moving to Orchestra when concurrent findings actually conflict
+[x] Designing — built both architectures on one shared typed state and one shared LLM/API layer
+[x] Realizing — ran Pipeline and Orchestra against all four scenarios
+[x] Managing — confirmed conflict resolution fires correctly and the decision log is written on every run
+
+
+3. What makes a good decision here
+
+A good architecture has to do three things. It has to support both sequential and parallel execution, because procurement has both kinds of work — a single stockout is a straight line, but competing alerts are not. It has to handle conflicting findings, such as a stockout on SKU-003 arriving at the same time as a duplicate invoice from the supplier that would fill that order. And it has to enforce the financial safeguard in code, not in a prompt the model can talk itself past.
+
+
+4. What I decided
+
+LangGraph, used in two patterns. Pipeline is a sequential six-node run for single-pass audits. Orchestra is a parallel multi-agent run for when concurrent findings conflict with each other. Both stay in the project; they are not competing drafts, they are two tools for two different situations.
+
+
+5. Why this decision
+
+Method: Library, Showroom, Lab
+
+I started with the Library method and compared LangGraph, AutoGen, CrewAI, and n8n against what Betsy actually needs. AutoGen and CrewAI both assume agents that talk to one another — a conversation where agents negotiate toward an answer. That is the wrong model for procurement. A stockout is not a conversation, it is a sequence: detect, evaluate, decide, act. n8n is visual and quick to prototype, but it hits a ceiling fast once the decision logic turns conditional. LangGraph lets me define the graph explicitly, pass typed state between nodes, and branch on what was found — sequential or parallel, my choice. That last point is what made it the right base for both patterns.
+
+The deciding test came from the Showroom method: I built both patterns against the same four scenarios and compared their outputs directly. The Pipeline came first — six nodes, ingest then detect then evaluate then decide then act then audit, with one typed state object passed through each node (@graph). The financial safeguard lives in the decide node as a hardcoded limit: anything over the autonomous spending cap routes to pending approval no matter what the model recommends. That is a business rule, not an AI judgement, and it is written as a constant in code (@decide).
+
+[IMAGE: diagrams/pipeline-overview.png — The six pipeline nodes in order: ingest, detect, evaluate, decide, act, audit. Anything that needs a person is parked in the approvals queue at the end.]
+
+The Pipeline worked cleanly until I ran the combined stockout-plus-duplicate-invoice scenario. Sequential processing handles the two findings independently: the Pipeline detected the stockout, evaluated suppliers, and queued a purchase order for SKU-003. Then, one node later, it noticed the duplicate invoice from that same supplier. The order was already in the queue. In a real deployment that ordering means a payment goes out to a supplier who is under financial investigation. This is exactly the failure the before-and-after analysis warns about — in the TO-BE process the duplicate-detection step (P10) and the high-value escalation gateway (P7) are meant to guard the order, not run after it has already been placed (@bpm_analysis). That gap is what forced the Orchestra pattern.
+
+Orchestra runs three specialist agents in parallel — inventory_monitor, supplier_scout, and invoice_auditor (@inventory_monitor · @supplier_scout · @invoice_auditor) — and feeds their findings to a central orchestrator that applies a conflict-precedence table before anything executes (@graph). A duplicate invoice always blocks the related purchase order. A price spike always requires human approval. Those rules are hardcoded, not prompted. The five stages run as build_brief, parallel_analysis, orchestrate, execute, audit.
+
+[IMAGE: diagrams/orchestra-overview.png — The five orchestra stages, with the three specialists (inventory_monitor, supplier_scout, invoice_auditor) running together before the orchestrator decides.]
+
+[IMAGE: diagrams/orchestra-conflict.png — The fixed precedence rules Betsy applies when two findings clash on one item: a duplicate invoice blocks the purchase order, a price spike forces human approval.]
+
+Both patterns use the same LLM client and the same API layer, so they are interchangeable at the run level (@llm · @api_client). The Lab comparison made the trade-off plain: the Pipeline is faster to trace when you are debugging a single decision, and Orchestra is safer when alerts compete for the same item.
+
+Both patterns plug into the same wider system. The container view below shows everything they sit inside — the two dashboards, the server and its database, the scheduler and the notifier, and the local model both agents call for reasoning — so the architecture choice here is really about one box (the agent) inside a system that does not otherwise change.
+
+[IMAGE: diagrams/system-c4-container.png — A C4 container view of Betsy: the people (Jenny, Finance), the external parties (Suppliers and the local AI model), and the parts inside the system — the two dashboards, the FastAPI server, the SQLite database, the scheduler, the notifier, and both agents.]
+
+                 Pipeline              Orchestra
+Pattern          Sequential, 1 thread  Parallel, 3 agents
+Conflict         None — first wins     Explicit precedence table
+handling
+LLM calls        Per node              Per agent + orchestrator tiebreaker
+Best for         Simple single-issue   Competing simultaneous alerts
+                 audit
+Safeguard        decide node           orchestrate node + per-agent
+location
+
+What I'd recommend:
+For a manager or client starting with procurement automation, begin with the Pipeline. It is readable, every decision traces back to one named node, and when something goes wrong you can point at exactly where. Move to Orchestra only once the sequential system is proven and you are actually hitting cases where two things go wrong at the same time. That is also the right moment to bring in finance, because the autonomous spending limit is a business policy, not a technical setting — agree on that number with finance before the first agent node is written, not after.
+
+
+6. Does this hold up
+
+- Supports sequential and parallel: yes — both patterns are implemented and runnable against all four scenarios.
+- Handles conflicting findings: yes — the Orchestra precedence table blocks the purchase order while a duplicate invoice is active (@graph).
+- Safeguards in code, not prompt: yes — the spending limit is a Python constant in the decide node, not a sentence in a system prompt (@decide).
+
+Assumptions I'm making:
+A locally hosted model is acceptable for demo scope. In production you would want a cloud-hosted model with an uptime guarantee — the local model has none, and the agent currently has no fallback if the model is unreachable.
+
+What surprised me:
+The Pipeline came first and the Orchestra was not planned. It emerged from one specific failure in the sequential run rather than from upfront design. That is a pattern worth noting: the architecture came from finding a scenario the simpler approach could not handle. Both patterns use the same typed-state shape — each pattern keeps its own @state file — which kept the comparison honest and made switching between them cheap.
+
+
+7. What this unlocks
+
+Next LO stage: Realizing → Managing (Phase 3 — memory and learning)
+
+What I can now do:
+Run any of the four scenarios end to end through either architecture and get a logged, explainable procurement decision — with a confidence score and a plain-English reasoning trail.
+
+Ongoing monitoring:
+Every run, Pipeline or Orchestra, ends with a decision logger that writes to the agent log. Each entry has a trigger, a decision, a confidence score, and a short narrative. A manager reviewing Monday morning's autonomous decisions does not need to understand LangGraph — they open the log, read the narratives, and flag anything that looks off. The confidence score is the signal to watch: anything below 0.7 should probably have been escalated for human review.
+
+How I'll know this worked:
+Running the stockout scenario from the terminal produces a log entry with trigger stockout_risk, decision generate_po, supplier QuickShip Express. The same scenario through Orchestra produces the same decision plus a conflict check confirming no duplicate invoice is blocking it. When both outputs match the expected result and the conflict resolution fires correctly, the architecture holds.
+
+
+Files: pipeline/graph.py, pipeline/nodes/decide.py, orchestra/graph.py, orchestra/agents/inventory_monitor.py, orchestra/agents/supplier_scout.py, orchestra/agents/invoice_auditor.py, shared/llm.py, shared/api_client.py, pipeline/state.py, orchestra/state.py
+Diagrams: diagrams/pipeline-overview.png, diagrams/orchestra-overview.png, diagrams/orchestra-conflict.png, diagrams/system-c4-container.png, diagrams/gap-to-be.png
+Source: bpm_analysis.html, docs/PIPELINE_ARCHITECTURE.md, docs/ORCHESTRA_ARCHITECTURE.md
+LO stages: Analyzing, Advising, Designing, Realizing, Managing

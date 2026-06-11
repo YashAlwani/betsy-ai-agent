@@ -73,8 +73,11 @@ def render_diagrams() -> None:
         if os.path.exists(png) and os.path.getmtime(png) >= os.path.getmtime(mmd):
             continue
         print(f"  rendering {name} -> {os.path.basename(png)}")
+        # -s 3 renders at 3x scale so diagrams stay sharp when zoomed in a PDF
+        # or viewer; -w 1600 sets a generous base width before that scaling.
         subprocess.run(
-            ["npx", "-y", "@mermaid-js/mermaid-cli", "-i", mmd, "-o", png, "-b", "white"],
+            ["npx", "-y", "@mermaid-js/mermaid-cli", "-i", mmd, "-o", png,
+             "-b", "white", "-s", "3", "-w", "1600"],
             check=True, shell=(os.name == "nt"),
         )
 

@@ -1,0 +1,119 @@
+====================================================================
+ BETSY — THE GAP ANALYSIS
+ How procurement works today, and how it changes with Betsy
+====================================================================
+
+WHAT THIS IS
+------------
+This is the "before and after" story for Betsy. It shows how a small
+manufacturer's procurement runs today — all by hand, by one busy
+operations manager named Jenny — and how the same work looks once Betsy
+takes over the routine parts.
+
+It is the starting point for the whole project: every design choice and
+every decision log points back to a problem shown here. A fully styled
+version lives in bpm_analysis.html; this document is the plain-text
+summary, with the diagrams pulled out as separate pictures so they can be
+reused anywhere.
+
+
+THE BIG PICTURE
+---------------
+- Jenny spends about 30–35 hours a week on procurement firefighting today.
+  With Betsy that drops to roughly 2–4 hours — only the decisions that
+  truly need a person. That is about an 87% cut.
+- Around 80% of the routine procurement work becomes automatic.
+- Finding a supplier goes from 1–2 days of back-and-forth email to under
+  5 seconds, because all suppliers are checked at once.
+- Every invoice is scanned for duplicates automatically — in the mock
+  data this catches a repeated $1,470 invoice that would likely have been
+  paid twice by hand.
+
+
+BEFORE — HOW PROCUREMENT WORKS TODAY (AS-IS)
+--------------------------------------------
+Jenny does almost everything herself, one step after another. She checks
+stock by hand, usually noticing a problem too late. She emails a few
+suppliers and waits a day or two for replies. She compares quotes in a
+spreadsheet, drafts the order, waits again for sign-off, emails the order
+out, then spends hours chasing the delivery. Finance matches invoices by
+hand, so duplicate bills can slip through. It is reactive, slow, and full
+of waiting.
+
+See the picture: diagrams/gap-as-is.mmd
+
+
+AFTER — HOW IT WORKS WITH BETSY (TO-BE)
+---------------------------------------
+Betsy watches stock around the clock and spots a shortage early. It checks
+all suppliers at once, scores them on price, reliability, and speed, and
+prepares an order with its reasoning written out. Routine orders go
+straight through; anything high-value or unusual is handed to Jenny for a
+quick yes/no. Deliveries and invoices are matched automatically, and
+duplicates are flagged before payment. Jenny is freed up for the
+strategic work she was actually hired to do.
+
+See the picture: diagrams/gap-to-be.mmd
+
+
+THREE REAL EXAMPLES
+-------------------
+These are the three situations Betsy is tested against. Each shows the
+same event handled the old way and the Betsy way.
+
+1. A near stockout on Steel Rods. By hand, it is spotted on a Monday with
+   the line at risk and a scramble to email suppliers. With Betsy, it is
+   caught within a minute and an order is on its way in seconds.
+
+   See the picture: diagrams/gap-scenario-stockout.mmd
+
+2. A duplicate invoice. By hand, a third identical $1,470 bill is easy to
+   miss and likely paid. With Betsy, it is flagged as a high risk in well
+   under a second and held before any payment.
+
+   See the picture: diagrams/gap-scenario-duplicate-invoice.mmd
+
+3. A price spike. By hand, there is no baseline, so there is a real risk
+   of overpaying under pressure. With Betsy, the quote is compared to the
+   historical average and escalated to Jenny with the full context.
+
+   See the picture: diagrams/gap-scenario-price-spike.mmd
+
+
+TIME SAVED EACH WEEK
+--------------------
+Before Betsy, a typical week is roughly: 4–5 hours checking stock, 6–8
+hours on supplier emails, 2–3 hours comparing quotes, 4–5 hours drafting
+and chasing approvals, 5–8 hours chasing deliveries, 3–4 hours on invoices,
+and 4–6 hours of Monday-morning firefighting — about 30–39 hours.
+
+After Betsy, almost all of that is automatic. What is left is roughly half
+an hour to an hour approving high-value orders, the same for reviewing
+flagged invoices, and one to two hours on strategy — about 2–4 hours.
+That is roughly 27–35 hours given back every week.
+
+
+WHY THIS MATTERS (AND WHERE IT IS USED)
+---------------------------------------
+This before/after picture is the reason the rest of the project exists.
+The decision logs each point back to a specific gain shown here — the
+approval flow keeps Jenny's one human checkpoint, the duplicate detector
+closes the invoice-error gap, the supplier scoring replaces gut-feel
+sourcing, and so on. The diagrams above are meant to be dropped straight
+into those logs as the justification for each piece of work.
+
+
+WHERE THIS LIVES
+----------------
+- bpm_analysis.html              the full styled before/after report
+- scenarios/                     the three tested situations, as data
+- mock_data/                     the 12 SKUs, 6 suppliers, and invoices
+
+
+DIAGRAMS FOR THIS DOCUMENT
+--------------------------
+- diagrams/gap-as-is.mmd                     the manual process (before)
+- diagrams/gap-to-be.mmd                     the Betsy process (after)
+- diagrams/gap-scenario-stockout.mmd         near stockout, before/after
+- diagrams/gap-scenario-duplicate-invoice.mmd  duplicate bill, before/after
+- diagrams/gap-scenario-price-spike.mmd      price jump, before/after

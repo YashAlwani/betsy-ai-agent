@@ -1,0 +1,96 @@
+DL-08 — Push Notifications: Desktop Alerts and Email for Betsy
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+DL-07 closed with proof that Betsy learns from delivery history and changes its supplier decisions over time. At that point the agent loop was complete: detect, evaluate, decide, act, approve, learn. But one gap in the human-in-the-loop flow was still untouched. Jenny had to keep Betsy's page open and wait for a five-second refresh to know that something needed her. If she was in a meeting, on another screen, or away from her desk, decisions sat in the queue unseen. The agent would stop and wait for her — but nothing told her it was waiting.
+
+DL-05 built the approval queue. DL-06 made it survive a restart. This log makes it reach Jenny wherever she is.
+
+There was no notification code anywhere in the project before this — nothing for email, alerts, or outbound messages of any kind. The only signal from Betsy to Jenny was a badge count on a dashboard tab. This is the first feature in the project with no earlier code to build on.
+
+
+1. Research question
+
+How do I push Betsy's decisions to Jenny without making her watch the dashboard — and without adding unreliable external dependencies?
+
+
+2. Current LO stage
+
+[ ] Analyzing
+[ ] Advising
+[ ] Designing
+[x] Realizing — built the notification system end to end
+[x] Managing — 22 of 22 tests pass, every trigger point verified, the settings panel works
+
+
+3. What makes a good decision here
+
+A notification has to reach Jenny outside the browser, since the dashboard already covers the in-browser case. A failure to send a notification must never break the agent's run. The settings have to be changeable from Betsy's page, with no terminal access needed. There should be no new required dependency — any extra library is optional. And all four meaningful events should be covered: an approval is needed, an order was placed automatically, a supplier's score has dropped, and a duplicate invoice was flagged. This is the notification step the before-and-after analysis places in the TO-BE process, where Jenny is told only when Betsy escalates rather than having to watch for it (@bpm_analysis).
+
+
+4. What I decided
+
+Build a two-channel notification system. Desktop toasts go through plyer, an optional library that quietly does nothing if it is not installed. Email goes through Python's built-in mail support, so it adds no new required dependency. All the sending logic lives in @notifier. The settings live in @config as plain module values that are read from environment variables at start-up and can be changed at runtime through a settings endpoint, and a settings panel was added to @betsy.
+
+
+5. Why this decision
+
+Method: Lab
+
+The real questions were which channels to use and where to trigger them.
+
+Choosing the channels.
+The first option was a third-party service such as Slack, Teams, or a push service. These deliver reliably and reach a phone, but each one needs an account, a network connection, and secrets to manage — and it breaks the project's portability, because sharing it only works if the other person has the same workspace set up. The second option was desktop plus email through the standard library. The desktop toast is one optional install, works on Windows, macOS, and Linux, and quietly does nothing if the library is missing. Email is built into Python and works with any normal mail provider, with no new hard dependency. Together, Jenny gets a pop-up on whatever screen she is on and an email she can read later, and both channels are opt-in. I chose desktop plus email: it matches what an operations manager actually uses, it teaches mail integration as part of the agent stack, and it does not require signing up for anything.
+
+Where to trigger them.
+The useful realisation was that all four approval triggers — a purchase order, a duplicate flag, a price spike, and an escalation — are marked as not auto-approved in the decide node, which means every one of them already flows through the act node and into the approval queue. So the notification can fire from a single point, where an item is queued, and that one place covers all four cases. I confirmed this in the decide node, where the duplicate flag, the price spike, and the escalation are each marked not auto-approved. The two remaining triggers — a supplier score dropping and an order placed automatically — fire from the orders router, which was already the right home for the score updates and order creation. No pipeline code was changed at all; the notifications are a pure server-side side effect.
+
+Alerting only on the crossing.
+The score-drop alert fires only when a supplier's score crosses below the warning line — the new score is under it and the old score was at or above it. That keeps a supplier who is already below the line from alerting again on every further late delivery: the first crossing sends the alert, and later updates at the same low level stay silent.
+
+Settings that change at runtime.
+The config uses plain module values rather than frozen constants, so the settings endpoint can change them while the server runs. The alternative — writing an environment file from the endpoint — needs file permissions and a restart to take effect. The module-value approach is simpler, works immediately, and suits a project where settings that need to survive a restart are handled by setting environment variables. The update function checks each incoming key against the existing settings, ignores anything unknown, and coerces the value to the right type, so a bad call cannot corrupt the configuration.
+
+Testing.
+There are 22 tests, all of them mocked so nothing real is sent. They cover the desktop channel (called when on, silent when off, long messages trimmed, errors swallowed), the email channel (correct sender and recipient, silent when not configured, sent on a background thread, errors swallowed), each public notification (fires when its toggle is on, skips when off), and the config update (type coercion, unknown keys rejected). The whole suite runs in well under a second, and all 22 passed (@test_notifier).
+
+The diagram below shows the shape of it — three kinds of event reaching one notifier, which fans out to the two channels and on to Jenny, with sending isolated so it can never break a run.
+
+[IMAGE: diagrams/notifications.png — Three event types (a held approval, a supplier score crossing the warning line, an auto-approved order) reach one server-side notifier, which sends a desktop toast and an email to Jenny while she is away from the dashboard. Sending can never break a run.]
+
+What surprised me:
+The notifier reads its settings from the config at the moment it is called, not when it is first loaded. That made the toggle tests simple — changing the config values is enough to flip a notification on or off, with no need to reload anything.
+
+
+6. Does this hold up
+
+- An approval is queued, and a notification fires: yes — the approvals router sends the approval notification the moment the item is saved, with the action mapped to a readable label (a purchase order, a flagged duplicate invoice, and so on).
+- A score drops, and a notification fires: yes — the orders router sends the score-drop alert only on the first crossing of the warning line; further late deliveries by the same supplier are silent.
+- An auto-approved order, and a notification fires: yes — the orders router sends the auto-order alert when the order came from the pipeline itself and that toggle is on. It is off by default, so human-approved orders do not create noise.
+- A failed notification cannot break the agent: yes — every send is wrapped so its errors are swallowed, and email goes out on a background thread, so even a slow mail server cannot hold up the response.
+- Settings are configurable from the interface: yes — @betsy now has a collapsible Notifications panel with the mail fields and a toggle per trigger. Save sends the settings to the server, and a test button sends a sample message. The settings are also kept in the browser across refreshes and applied to the server for the session.
+
+What I assumed:
+Jenny uses a mail provider that supports TLS on the standard submission port. That covers Gmail app passwords, Outlook, and most hosted email. Plain unencrypted mail is deliberately not supported.
+
+Known limitation:
+Runtime settings last until the server restarts. If Jenny configures mail from the interface and the server restarts, she has to set it again or put the values in an environment file. That is acceptable for a prototype at this scale.
+
+
+7. What this unlocks
+
+What I can now do:
+Jenny can close Betsy's page and go to a meeting. Betsy detects a critical stockout and queues an $11,937 order. Her desktop shows a toast — Betsy needs your OK for SKU-003 — and her inbox gets an email with the supplier, the cost, and the reasoning, and a link back to the dashboard, so she can approve from her phone on the way back to her desk. Or QuickShip makes a run of late deliveries and its score crosses the warning line; Jenny gets an alert and can take it up with the supplier before Betsy stops recommending them. The full loop — Betsy decides, Jenny is notified, Jenny approves, the order is placed — works without Jenny watching any dashboard.
+
+Next LO stage: fully autonomous with human oversight — the system tells Jenny when she is needed instead of asking her to keep watch.
+
+How I'll know this worked:
+Configure mail in the interface, run the stockout scenario, watch the desktop toast appear, and check the inbox for the email with the approval details. Then clear the notification email address and run again — no email is sent and no error is thrown.
+
+
+Files: server/config.py, server/notifier.py, server/routers/notifications.py, tests/test_notifier.py, server/main.py, server/routers/approvals.py, server/routers/orders.py, dashboard/betsy.html, requirements.txt
+Diagrams: diagrams/notifications.png
+Source: bpm_analysis.html
+LO stages: Realizing, Managing

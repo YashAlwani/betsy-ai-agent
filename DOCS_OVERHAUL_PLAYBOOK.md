@@ -73,8 +73,23 @@ build_design_docs.py      renders .mmd -> .png and builds the .txt -> PDF
 
 ## Toolchain (direction)
 
-- **Render Mermaid -> PNG:** `npx -y @mermaid-js/mermaid-cli -i x.mmd -o x.png -b white`
-  (needs Node; first run fetches the CLI + a headless browser).
+- **Render Mermaid -> PNG, high-res:** `npx -y @mermaid-js/mermaid-cli -i x.mmd
+  -o x.png -b white -s 3 -w 1600` (needs Node; first run fetches the CLI + a
+  headless browser). The `-s 3` (3x scale) is what makes diagrams stay sharp when
+  a reader zooms a PDF — default scale looks blurry. Use a wider `-w` for wide
+  diagrams (e.g. a C4 container view: `-w 2000`).
+  - **Stale-render gotcha:** a build that "renders if PNG missing or older than
+    the .mmd" will *skip* unchanged diagrams. After changing render settings,
+    delete the stale `.png`s to force a re-render.
+- **Wireframes -> PNG (proper wireframes, not ASCII):** author in **wiremd**
+  (`npm install -g wiremd`), render with `--style wireframe`. wiremd only emits
+  HTML, so screenshot it to PNG with headless Edge/Chrome
+  (`msedge --headless=new --screenshot=out.png --window-size=W,H
+  --force-device-scale-factor=2 in.html`) and **auto-crop** the fixed-window
+  whitespace with Pillow. Wrap the three steps in a small `build_wireframes.py`.
+  wiremd syntax cheat: input `[____]{type:search}`, primary button `[Label]*`,
+  grid `## Title {.grid-N}` with `###` items, GFM tables, blockquote = AI
+  summary. (WireScript is a *different* tool with native PNG but its own syntax.)
 - **Build PDFs:** a small script (reportlab works well) that:
   1. renders any `.mmd` whose `.png` is missing/stale, then
   2. turns each `.txt` into a PDF, embedding `diagrams/<name>.png` wherever the
@@ -119,14 +134,44 @@ the build script embeds the PNG there.
 
 - **Keep the existing structure/scaffold** (section headings, required fields).
   Do not restructure a graded/required format — only rewrite the prose.
-- **Rewrite prose plain and direct**, in coherent steady blocks.
+- **Rewrite prose plain and direct**, in coherent steady blocks. No witty
+  fragments, no symbol soup. Replace status emoji (✅ 🟡 ✦) with plain words.
 - **Use this pattern** for justification paragraphs:
   *"[File] does this. According to [analysis/design doc] this is why. This led to
   [outcome / the next gap]."*
 - **Drop advisory tangents** ("if I were advising…") unless explicitly required.
-- Keep logs as `.txt`; reference diagrams/images **by path** (e.g.
-  `diagrams/<name>.png`) using whatever image-placeholder convention the logs
-  already use.
+- **Tie each log back to the GAP.** Weave one sentence into each log linking the
+  decision to the before/after (e.g. "this is the escalation gateway in the
+  TO-BE process"), referencing the GAP source by name.
+- **Give each log a diagram.** If a log has none, author one (`.mmd`) for it and
+  reference it; render it high-res like the rest.
+
+### Reference conventions (these decide whether a log survives upload)
+
+- **Inline file references: strip the extension and the path — bare name only.**
+  `@server/state.py` → `@state`, `@pipeline/nodes/decide.py` → `@decide`. Upload
+  platforms linkify `@file.ext` in free text; a bare `@name` does not trip that.
+  Let surrounding context disambiguate collisions (e.g. two `@graph` files).
+- **No `.md` files in the body text.** Architecture/test-report markdown belongs
+  only in the footer `Source:` line, never as an inline `@` token in prose.
+- **Footer is plain lines, not `@` tokens:** `Files:` (real paths + extensions,
+  comma-separated) · `Diagrams:` (diagrams/<name>.png) · `Source:` (GAP html +
+  any .md) · `LO stages:`. Footer lists keep extensions — they are safe there.
+- **Images: bracket callouts `[IMAGE: path/name.png — caption]`** (brackets are
+  upload-safe). Point only at files that actually exist — audit for dead refs
+  (old logs often cite screenshots that were never committed).
+- **Filename format:** name each log `[DL-0N] <research question>.txt` so the
+  collection summary can reference it as `[DL-0N]`. Rename with `git mv`.
+
+### Collection summary direction
+
+- Make the summary a **sprint-story narrative artifact** built from `git log`:
+  one section per sprint, each with a plain-language story, **Key commits**
+  (verified hashes), the **Decision logs** it produced (referenced by stripped
+  filename, e.g. `[DL-02] Should I use a pipeline…`), the **Diagrams** (stripped
+  names), and a **What it unlocked** line.
+- In the summary, **do not embed images** — just refer to the stripped filename
+  (`gap-as-is`, `learning-crossover`). Verify every reference resolves.
 
 ---
 
@@ -157,4 +202,10 @@ the build script embeds the PNG there.
   top-to-bottom.
 - The architecture docs described an older design (files/classes that no longer
   existed) -> always re-derive docs from the current code.
+- The generic `md -> pdf` converter rendered `✅`/`✦` as a `?` glyph (outside its
+  font) and laid tables out as monospace blocks -> for **test reports**, keep the
+  results table and any formula as evidence but rewrite the prose plain, swap
+  `✅ -> pass`, and trim raw JSON to a short plain note. Plain prose, evidence kept.
+- A locked PDF (open in a viewer) blocks overwrite on Windows -> build to a
+  `*.new.pdf`, verify, then swap once the viewer is closed.
 ```

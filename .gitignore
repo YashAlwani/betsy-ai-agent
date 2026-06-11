@@ -40,3 +40,9 @@ htmlcov/
 *.mp4
 *.mov
 betsy.db
+
+# wiremd build artifacts (HTML is regenerated from *.wmd.md by build_wireframes.py)
+diagrams/wireframes/*.html
+
+# Separated unused files (kept locally, not tracked)
+deletable/
