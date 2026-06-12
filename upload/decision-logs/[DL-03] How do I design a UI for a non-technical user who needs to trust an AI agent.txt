@@ -87,7 +87,7 @@ How I'll know this worked:
 Open @betsy after a pipeline run. If the narrative reads something like "Steel Bolts were running low — I ordered more from FastParts Co." and the inventory table shows that SKU marked critical with "ordered" in the action column, the design is doing its job.
 
 
-Files: dashboard/wireframe.html, dashboard/betsy.html, dashboard/index.html
-Diagrams: diagrams/wireframe-betsy-standalone.png, diagrams/wireframe-betsy-layer.png, diagrams/gap-to-be.png
-Source: bpm_analysis.html, docs/user_requirements.md, docs/wireframes.md
+Files: @wireframe, @betsy, @index
+Diagrams: @wireframe-betsy-standalone, @wireframe-betsy-layer, @gap-to-be
+Source: @bpm_analysis, @user_requirements, @wireframes
 LO stages: Analyzing, Advising, Designing

@@ -130,6 +130,15 @@ notifications.mmd
   toast and an email — and can never break a run.
   Document: decision_logs/DL-08 · Code: server/notifier.py, server/config.py
 
+decision-lifecycle.mmd
+  The whole life of one decision as a state machine: detected, evaluated,
+  decided, then either auto-approved or held for Jenny — and on through PO
+  created, in transit, delivered, and the supplier's score updated. Shows
+  the $5,000 limit as the hard gate that splits the two paths.
+  Document: decision_logs/DL-04, DL-05, DL-06, DL-07
+  Code:     pipeline/nodes/decide.py, pipeline/nodes/act.py,
+            server/routers/approvals.py, server/routers/orders.py
+
 --------------------------------------------------------------------
  OTHER DESIGN DOCS
 --------------------------------------------------------------------

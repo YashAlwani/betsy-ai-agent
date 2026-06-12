@@ -28,7 +28,7 @@ Three things have to be true. A decision the pipeline queues has to appear as a 
 
 4. What I decided
 
-Build the approvals API as a standalone router with three endpoints — list pending, approve, reject — have the act node queue every human-review decision to it, and execute the deferred PO creation inside the approve handler directly against state.
+Build the approvals API as a standalone router with three endpoints — list pending, approve, reject — have the act node queue every human-review decision to it, and execute the deferred PO creation inside the approve handler directly against state — the step that finally closes the decision lifecycle end to end (@decision-lifecycle).
 
 
 5. Why this decision
@@ -42,6 +42,8 @@ This is the same human checkpoint the before-and-after analysis puts in the TO-B
 [IMAGE: diagrams/pipeline-approval.png — The human checkpoint: the agent parks a ready-to-go purchase order in the approvals queue, the run finishes, and Jenny approves or rejects it later from her page.]
 
 The act node builds the complete PO payload the moment a decision is made — supplier, SKU, quantity, unit price, reasoning — and passes the whole thing to the approval queue. Nothing is recomputed later. The approve endpoint in @approvals picks that payload up, creates the PO directly in state, and logs the human decision (@act).
+
+[IMAGE: diagrams/decision-lifecycle.png — One decision from start to finish: detected, evaluated, decided, then either auto-approved or held for Jenny's OK, and on through the order being placed, delivered, and the supplier's score updated. The $5,000 limit is the hard gate between the two paths.]
 
 @betsy needed no changes at all. It was already calling the list, approve, and reject endpoints — the front end had been waiting for the back end the whole time.
 
@@ -98,7 +100,7 @@ How I'll know this worked:
 Run the stockout scenario, see the approval card appear on @betsy within five seconds, click "Yes, go ahead", and watch the approved entry appear in the decision log and the PO appear in the dev view's orders tab — one uninterrupted flow. That is the moment the loop closes.
 
 
-Files: server/routers/approvals.py, pipeline/nodes/act.py, shared/api_client.py, server/state.py
-Diagrams: diagrams/pipeline-approval.png
-Source: bpm_analysis.html, docs/test-report-dl05.md
+Files: @approvals, @act, @api_client, @state
+Diagrams: @pipeline-approval, @decision-lifecycle
+Source: @bpm_analysis, @test-report-dl05
 LO stages: Realizing, Managing

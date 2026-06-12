@@ -46,3 +46,10 @@ diagrams/wireframes/*.html
 
 # Separated unused files (kept locally, not tracked)
 deletable/
+
+# Claude's docs-overhaul tooling + meta-docs (kept local, not part of the project)
+build_design_docs.py
+build_wireframes.py
+convert_md_to_pdf.py
+DOCS_OVERHAUL_PLAYBOOK.md
+OVERHAUL_INSTRUCTIONS.md

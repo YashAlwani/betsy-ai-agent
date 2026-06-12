@@ -30,7 +30,7 @@ Three things have to be true. The score trajectory has to be predictable — eig
 
 4. What I decided
 
-Build a standalone integration test — @test_long_term_learning — that runs two complete pipeline calls with a structured set of deliveries between them. Eight rounds: QuickShip Express gets five deliveries all eight days late, FastParts Co gets three on-time deliveries. Both runs use the stockout scenario on SKU-003, the same stockout that has been the main test case throughout the project.
+Build a standalone integration test — @test_long_term_learning — that runs two complete pipeline calls with a structured set of deliveries between them. Eight rounds: QuickShip Express gets five deliveries all eight days late, FastParts Co gets three on-time deliveries. Both runs use the stockout scenario on SKU-003, the same stockout that has been the main test case throughout the project. Each of those deliveries walks the back half of the decision lifecycle — delivered, then the supplier's score updated (@decision-lifecycle).
 
 
 5. Why this decision
@@ -63,7 +63,7 @@ So the composite scores end up reversed:
     QuickShip:  0.4359 / 1 day = 0.436   second place
     FastParts:  0.9744 / 2 days = 0.487   the new winner
 
-The crossover happens between rounds 4 and 5. After round 4, QuickShip's composite (0.495) is still above FastParts (0.475). After round 5 it drops to 0.436 — below FastParts even before FastParts improves. The eight-round schedule was chosen to make that crossover clear and reproducible, with an exact predicted value at every step. This is the evidence-based supplier scoring the before-and-after analysis describes: who Betsy orders from follows the delivery record, not a fixed guess made once (@bpm_analysis).
+The crossover happens between rounds 4 and 5. After round 4, QuickShip's composite (0.495) is still above FastParts (0.475). After round 5 it drops to 0.436 — below FastParts even before FastParts improves. The eight-round schedule was chosen to make that crossover clear and reproducible, with an exact predicted value at every step. This is the evidence-based supplier scoring the before-and-after analysis describes: who Betsy orders from follows the delivery record, not a fixed guess made once (@bpm_analysis). Each delivery here repeats that delivered-to-score step eight times, until the accumulated history flips the ranking.
 
 [IMAGE: diagrams/learning-crossover.png — The shortlist for SKU-003 flips. In run 1 QuickShip leads on its 1-day lead; after five late deliveries (0.92 to 0.44) and three on-time FastParts deliveries (0.95 to 0.97), run 2 puts FastParts first and QuickShip second.]
 
@@ -101,7 +101,7 @@ Ongoing monitoring:
 Every score update logs to the agent log with the old score, the new score, the lateness, and the performance value. After a delivery run, filter the decision log on the score-update entries to see the full history of how each supplier's reliability has moved. That log is the audit trail for the learning claim.
 
 
-Files: tests/test_long_term_learning.py, pipeline/nodes/evaluate.py, server/routers/suppliers.py, server/routers/orders.py, server/state.py
-Diagrams: diagrams/learning-crossover.png
-Source: bpm_analysis.html, docs/test-report-dl06.md
+Files: @test_long_term_learning, @evaluate, @suppliers-router, @orders, @state
+Diagrams: @learning-crossover, @decision-lifecycle
+Source: @bpm_analysis, @test-report-dl06
 LO stages: Designing, Realizing, Managing

@@ -43,13 +43,13 @@ Method: Library, Showroom, Lab
 
 I started with the Library method and compared LangGraph, AutoGen, CrewAI, and n8n against what Betsy actually needs. AutoGen and CrewAI both assume agents that talk to one another — a conversation where agents negotiate toward an answer. That is the wrong model for procurement. A stockout is not a conversation, it is a sequence: detect, evaluate, decide, act. n8n is visual and quick to prototype, but it hits a ceiling fast once the decision logic turns conditional. LangGraph lets me define the graph explicitly, pass typed state between nodes, and branch on what was found — sequential or parallel, my choice. That last point is what made it the right base for both patterns.
 
-The deciding test came from the Showroom method: I built both patterns against the same four scenarios and compared their outputs directly. The Pipeline came first — six nodes, ingest then detect then evaluate then decide then act then audit, with one typed state object passed through each node (@graph). The financial safeguard lives in the decide node as a hardcoded limit: anything over the autonomous spending cap routes to pending approval no matter what the model recommends. That is a business rule, not an AI judgement, and it is written as a constant in code (@decide).
+The deciding test came from the Showroom method: I built both patterns against the same four scenarios and compared their outputs directly. The Pipeline came first — six nodes, ingest then detect then evaluate then decide then act then audit, with one typed state object passed through each node (@pipeline-graph). The financial safeguard lives in the decide node as a hardcoded limit: anything over the autonomous spending cap routes to pending approval no matter what the model recommends. That is a business rule, not an AI judgement, and it is written as a constant in code (@decide).
 
 [IMAGE: diagrams/pipeline-overview.png — The six pipeline nodes in order: ingest, detect, evaluate, decide, act, audit. Anything that needs a person is parked in the approvals queue at the end.]
 
 The Pipeline worked cleanly until I ran the combined stockout-plus-duplicate-invoice scenario. Sequential processing handles the two findings independently: the Pipeline detected the stockout, evaluated suppliers, and queued a purchase order for SKU-003. Then, one node later, it noticed the duplicate invoice from that same supplier. The order was already in the queue. In a real deployment that ordering means a payment goes out to a supplier who is under financial investigation. This is exactly the failure the before-and-after analysis warns about — in the TO-BE process the duplicate-detection step (P10) and the high-value escalation gateway (P7) are meant to guard the order, not run after it has already been placed (@bpm_analysis). That gap is what forced the Orchestra pattern.
 
-Orchestra runs three specialist agents in parallel — inventory_monitor, supplier_scout, and invoice_auditor (@inventory_monitor · @supplier_scout · @invoice_auditor) — and feeds their findings to a central orchestrator that applies a conflict-precedence table before anything executes (@graph). A duplicate invoice always blocks the related purchase order. A price spike always requires human approval. Those rules are hardcoded, not prompted. The five stages run as build_brief, parallel_analysis, orchestrate, execute, audit.
+Orchestra runs three specialist agents in parallel — inventory_monitor, supplier_scout, and invoice_auditor (@inventory_monitor · @supplier_scout · @invoice_auditor) — and feeds their findings to a central orchestrator that applies a conflict-precedence table before anything executes (@orchestra-graph). A duplicate invoice always blocks the related purchase order. A price spike always requires human approval. Those rules are hardcoded, not prompted. The five stages run as build_brief, parallel_analysis, orchestrate, execute, audit.
 
 [IMAGE: diagrams/orchestra-overview.png — The five orchestra stages, with the three specialists (inventory_monitor, supplier_scout, invoice_auditor) running together before the orchestrator decides.]
 
@@ -78,14 +78,14 @@ For a manager or client starting with procurement automation, begin with the Pip
 6. Does this hold up
 
 - Supports sequential and parallel: yes — both patterns are implemented and runnable against all four scenarios.
-- Handles conflicting findings: yes — the Orchestra precedence table blocks the purchase order while a duplicate invoice is active (@graph).
+- Handles conflicting findings: yes — the Orchestra precedence table blocks the purchase order while a duplicate invoice is active (@orchestra-graph).
 - Safeguards in code, not prompt: yes — the spending limit is a Python constant in the decide node, not a sentence in a system prompt (@decide).
 
 Assumptions I'm making:
 A locally hosted model is acceptable for demo scope. In production you would want a cloud-hosted model with an uptime guarantee — the local model has none, and the agent currently has no fallback if the model is unreachable.
 
 What surprised me:
-The Pipeline came first and the Orchestra was not planned. It emerged from one specific failure in the sequential run rather than from upfront design. That is a pattern worth noting: the architecture came from finding a scenario the simpler approach could not handle. Both patterns use the same typed-state shape — each pattern keeps its own @state file — which kept the comparison honest and made switching between them cheap.
+The Pipeline came first and the Orchestra was not planned. It emerged from one specific failure in the sequential run rather than from upfront design. That is a pattern worth noting: the architecture came from finding a scenario the simpler approach could not handle. Both patterns use the same typed-state shape — each pattern keeps its own state file (@pipeline-state, @orchestra-state) — which kept the comparison honest and made switching between them cheap.
 
 
 7. What this unlocks
@@ -102,7 +102,7 @@ How I'll know this worked:
 Running the stockout scenario from the terminal produces a log entry with trigger stockout_risk, decision generate_po, supplier QuickShip Express. The same scenario through Orchestra produces the same decision plus a conflict check confirming no duplicate invoice is blocking it. When both outputs match the expected result and the conflict resolution fires correctly, the architecture holds.
 
 
-Files: pipeline/graph.py, pipeline/nodes/decide.py, orchestra/graph.py, orchestra/agents/inventory_monitor.py, orchestra/agents/supplier_scout.py, orchestra/agents/invoice_auditor.py, shared/llm.py, shared/api_client.py, pipeline/state.py, orchestra/state.py
-Diagrams: diagrams/pipeline-overview.png, diagrams/orchestra-overview.png, diagrams/orchestra-conflict.png, diagrams/system-c4-container.png, diagrams/gap-to-be.png
-Source: bpm_analysis.html, docs/PIPELINE_ARCHITECTURE.md, docs/ORCHESTRA_ARCHITECTURE.md
+Files: @pipeline-graph, @decide, @orchestra-graph, @inventory_monitor, @supplier_scout, @invoice_auditor, @llm, @api_client, @pipeline-state, @orchestra-state
+Diagrams: @pipeline-overview, @orchestra-overview, @orchestra-conflict, @system-c4-container, @gap-to-be
+Source: @bpm_analysis, @pipeline-architecture, @orchestra-architecture
 LO stages: Analyzing, Advising, Designing, Realizing, Managing

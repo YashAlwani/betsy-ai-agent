@@ -127,6 +127,11 @@ the build script embeds the PNG there.
   with clean layout.
 - **Sequences:** use `sequenceDiagram` for request/response round-trips (e.g. an
   approval flow).
+- **Lifecycles / state machines:** use `stateDiagram-v2` for one entity moving through
+  its states (e.g. a decision/order: detected → evaluated → decided → auto-approved or
+  held → created → in-transit → delivered → score-updated). Pull the real state strings
+  from the code (status fields, branch conditions) so the diagram matches behaviour;
+  mark the key business gate (e.g. the `$5,000` auto-approve limit) as the branch.
 
 ---
 
@@ -148,30 +153,81 @@ the build script embeds the PNG there.
 
 ### Reference conventions (these decide whether a log survives upload)
 
-- **Inline file references: strip the extension and the path — bare name only.**
-  `@server/state.py` → `@state`, `@pipeline/nodes/decide.py` → `@decide`. Upload
-  platforms linkify `@file.ext` in free text; a bare `@name` does not trip that.
-  Let surrounding context disambiguate collisions (e.g. two `@graph` files).
-- **No `.md` files in the body text.** Architecture/test-report markdown belongs
-  only in the footer `Source:` line, never as an inline `@` token in prose.
-- **Footer is plain lines, not `@` tokens:** `Files:` (real paths + extensions,
-  comma-separated) · `Diagrams:` (diagrams/<name>.png) · `Source:` (GAP html +
-  any .md) · `LO stages:`. Footer lists keep extensions — they are safe there.
-- **Images: bracket callouts `[IMAGE: path/name.png — caption]`** (brackets are
-  upload-safe). Point only at files that actually exist — audit for dead refs
-  (old logs often cite screenshots that were never committed).
-- **Filename format:** name each log `[DL-0N] <research question>.txt` so the
-  collection summary can reference it as `[DL-0N]`. Rename with `git mv`.
+The upload platform **links uploaded evidences by an `@name` typed in free text.** So
+the one hard requirement is that every `@token` matches the name its evidence is uploaded
+under. Everything below follows from that.
+
+- **Everything is a bare `@token` — body AND footer.** Strip path and extension:
+  `server/state.py` → `@state`, `pipeline/nodes/decide.py` → `@decide`,
+  `diagrams/learning-crossover.png` → `@learning-crossover`,
+  `analysis/case_summary.md` → `@case_summary` (it uploads as a PDF; the token is what
+  links it). The `Files:` / `Diagrams:` / `Source:` footer lines are token lists too —
+  **no path survives anywhere a `@` appears**, and `.md`/`.html` design docs may be inline
+  tokens now (they link to their uploaded PDF/HTML, not to raw markdown).
+- **Resolve every collision 1:1.** A `@name` links to exactly one evidence, so two
+  different files cannot share a token — do NOT rely on context to disambiguate, the
+  platform can't. Keep the most-referenced file on the bare name and qualify the rest:
+  `@state` (server) vs `@pipeline-state` / `@orchestra-state`; `@pipeline-graph` /
+  `@orchestra-graph`; `@suppliers` (data) vs `@suppliers-router`; `@notifications`
+  (diagram) vs `@notifications-router`.
+- **Foreground design, keep code in the footer, bridge with a footnote.** Where the prose
+  should point at a design doc but the code still matters, point straight at the design
+  with a superscript number (`¹@api-control-layer`) and put the code file in the footer
+  under the same number (`¹@main`). Design leads the sentence; code is one hop away. Don't
+  write "described in the X design" prose — the token *is* the pointer.
+- **Keep an evidence manifest.** One file (`EVIDENCE-MANIFEST.md`) maps every `@token` →
+  the real file to upload and the name to give it. Because the logs no longer carry paths,
+  this manifest is the only token↔file lookup and doubles as the upload checklist.
+- **Images: bracket callouts keep their path** — `[IMAGE: diagrams/name.png — caption]`.
+  This is the one place a path survives, because the callout points a human at the actual
+  picture. Point only at files that exist — audit for dead refs.
+- **Filename format:** name each log `[DL-0N] <research question>.txt` so the summary can
+  reference it as `[DL-0N]`. Rename with `git mv`.
 
 ### Collection summary direction
 
-- Make the summary a **sprint-story narrative artifact** built from `git log`:
-  one section per sprint, each with a plain-language story, **Key commits**
-  (verified hashes), the **Decision logs** it produced (referenced by stripped
-  filename, e.g. `[DL-02] Should I use a pipeline…`), the **Diagrams** (stripped
-  names), and a **What it unlocked** line.
-- In the summary, **do not embed images** — just refer to the stripped filename
-  (`gap-as-is`, `learning-crossover`). Verify every reference resolves.
+- Ship the summary as a **`.txt`** (same upload reasoning as the logs), with a
+  short intro — **What is this? / Why / What was accomplished** — then a
+  **sprint-story** built from `git log`: one section per sprint.
+- Each sprint = **explanation first** in clean plain prose, with the design-doc/diagram
+  `@token` **woven in beside any sentence that mentions that design** (in parentheses
+  right before or after the sentence — minimal text change, the token *is* the link);
+  then the pointer lines, then a **What it unlocked** line:
+  - `Designs & reports:` — `@`-pointers to the **transferable evidence**: design
+    docs, diagrams, and test/PDF reports by stripped name (`@gap-analysis`,
+    `@learning-crossover`, `@test-report-dl05`). **Never point at code** — let the
+    design docs/diagrams/reports surround it; name a code file only briefly if
+    unavoidable.
+  - `Decision logs:` — `@[DL-0N]` (matches the renamed log files).
+- **Do not embed images** and **do not list commit hashes** in the summary — the
+  `@`-pointers to docs/diagrams/reports are the references. Verify every one
+  resolves to a real file.
+
+---
+
+## Packaging & delivery
+
+Once the docs are accurate and plain, separate the repo into three buckets —
+**never delete anything**, just sort.
+
+- **`deletable/` — flat, git-ignored, local-only.** Move (don't copy) the unused
+  and superseded files here: stray screenshots, scratch notes, build artifacts,
+  duplicate "evidence" copies, planning docs, and any orphaned PDFs of the above.
+  Add `deletable/` to `.gitignore`. Drop the moved docs from the PDF builder's
+  file list so it doesn't try to rebuild them. Nothing is lost — the files just
+  leave the tracked repo and sit locally.
+- **`upload/` — committed deliverable bundle.** *Copy* (don't move) the
+  submission set into a clean structure: `decision-logs/` (`.txt` + summary),
+  `design-docs/` (`.txt` + their PDFs), `diagrams/` (the referenced `.png` +
+  `00-INDEX.txt`), `reports/` (test-report PDFs), plus the GAP artifact and the
+  README/plan PDFs. Regenerate all PDFs *before* copying so the bundle is current.
+- **Everything else stays** — the actual code, the accurate `.md` sources, the
+  diagram sources, the build scripts.
+
+Then deliver with git: branch (`git checkout -b <name>` — **no spaces in branch
+names**), `git add -A` (the `deletable/` ignore keeps it out, `upload/` goes in),
+commit, push, and merge to the main branch. If the remote has diverged, **fetch
+and merge — never force-push** a shared branch.
 
 ---
 
@@ -185,10 +241,16 @@ the build script embeds the PNG there.
 4. Add a C4 container diagram and a system-overview diagram (put one in the
    README).
 5. Stand up the `diagrams/` folder, the `00-INDEX.txt` point document, and the
-   build script.
-6. Rewrite the decision logs with the pattern above, keeping their structure.
-7. Simplify the language across analysis/planning docs.
-8. Checkpoint (commit) at logical milestones.
+   build script. Render diagrams high-res (`-s 3`).
+6. Rebuild the wireframes as proper wiremd wireframes (not ASCII).
+7. Rewrite the decision logs with the conventions above (bare `@` refs, GAP ties,
+   per-log diagram, `[DL-0N]` filenames), then the collection summary as a `.txt`.
+8. Rewrite test reports plain (keep the evidence tables/formulas).
+9. Simplify the language across analysis/planning docs only where they are
+   genuinely old-style — leave already-plain and intentionally-technical `.md`
+   sources alone.
+10. Regenerate all PDFs, then package into `deletable/` + `upload/`.
+11. Branch, commit, push, merge.
 
 ---
 

@@ -41,13 +41,13 @@ Build the environment first and the agent second. That means the mock datasets, 
 
 Method: Lab, Workshop
 
-The inventory data [mock_data/inventory.json] holds the 12 SKUs, and each one carries a reorder point and an average daily usage. According to the case summary [analysis/case_summary.md], preventing stockouts is the core problem, so those two numbers are required rather than optional: without them the agent can only see that stock is low, not how urgent it is. This led directly to the stockout calculation the agent relies on later — days remaining equals current stock divided by daily usage.
+The inventory data @inventory holds the 12 SKUs, and each one carries a reorder point and an average daily usage. According to the case summary (@case_summary), preventing stockouts is the core problem, so those two numbers are required rather than optional: without them the agent can only see that stock is low, not how urgent it is. This led directly to the stockout calculation the agent relies on later — days remaining equals current stock divided by daily usage.
 
-The supplier data [mock_data/suppliers.json] gives each supplier a different price, lead time, and reliability score. According to the stakeholder analysis [analysis/stakeholder_analysis.md], production needs speed while finance needs cost control, so the suppliers were deliberately built to pull in different directions — for example a fast but expensive option against a cheap but slow one. This led to supplier selection being a real decision with a defensible answer, instead of a list where any choice is as good as another.
+The supplier data @suppliers gives each supplier a different price, lead time, and reliability score. According to the stakeholder analysis (@stakeholder_analysis), production needs speed while finance needs cost control, so the suppliers were deliberately built to pull in different directions — for example a fast but expensive option against a cheap but slow one. This led to supplier selection being a real decision with a defensible answer, instead of a list where any choice is as good as another.
 
-The scenario files [scenarios/] each describe one problem and the action the agent should take. According to the before-and-after picture in the GAP analysis [diagrams/gap-as-is.png, bpm_analysis.html], the four situations worth modelling are a stockout, a price spike, a duplicate invoice, and a supplier being unavailable. Building each as its own file with an expected outcome led to a test suite where any agent run can be checked against a known answer.
+The scenario files @scenarios each describe one problem and the action the agent should take. According to the before-and-after picture in the GAP analysis (@bpm_analysis), the four situations worth modelling are a stockout, a price spike, a duplicate invoice, and a supplier being unavailable. Building each as its own file with an expected outcome led to a test suite where any agent run can be checked against a known answer.
 
-The scenario injection [server/state.py] applies a scenario by copying the base state and patching only the relevant fields. According to the third requirement above (clean resets), this was needed so runs never contaminate each other. This led to a server I can re-test all day without restarting it, because every injection starts from the same clean baseline.
+The scenario injection @state applies a scenario by copying the base state and patching only the relevant fields. According to the third requirement above (clean resets), this was needed so runs never contaminate each other. This led to a server I can re-test all day without restarting it, because every injection starts from the same clean baseline.
 
 [IMAGE: gap-as-is.png — The manual procurement process this environment is built to model: Jenny doing every step by hand, with the waits and hand-offs that Betsy is meant to remove.]
 
@@ -63,7 +63,7 @@ The environment now shows the whole problem clearly: SKU-003 is critically low a
 
 - Covers all four problems: yes — each is injectable and each carries an expected action for checking.
 - Real decisions, not trivial ones: yes — supplier trade-offs are genuine and the duplicate invoice is deliberately ambiguous.
-- Resets cleanly: yes — the base state is copied on every injection [server/state.py].
+- Resets cleanly: yes — the base state is copied on every injection (@state).
 
 Assumptions I'm making:
 Six suppliers and twelve SKUs is enough variety for a school-scope project. Real procurement is noisier, but the four problems are the same.
@@ -86,6 +86,7 @@ How I'll know this worked:
 When the agent in DL-02 logs a decision after the stockout run — trigger stockout, action generate purchase order, supplier QuickShip Express — that is the moment this gap closes.
 
 
-Files: mock_data/inventory.json, mock_data/suppliers.json, scenarios/, server/state.py
-Diagrams: diagrams/gap-as-is.png, decision_logs/images/gap-dashboard-empty-log.png, decision_logs/images/gap-supplier-scoreboard.png
+Files: @inventory, @suppliers, @scenarios, @state
+Diagrams: @gap-as-is, @gap-dashboard-empty-log, @gap-supplier-scoreboard
+Source: @bpm_analysis, @case_summary, @stakeholder_analysis
 LO stages: Analyzing, Advising, Designing, Realizing, Managing
