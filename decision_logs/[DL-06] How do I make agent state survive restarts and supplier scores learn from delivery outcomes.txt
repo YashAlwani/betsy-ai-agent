@@ -34,7 +34,7 @@ Four things have to be true. The agent log and the pending approvals have to sur
 
 Four pieces, built as one sprint. SQLite persistence through a new @db module using Python's built-in database support, so no new service is needed. Supplier-score updates triggered when a purchase order is delivered. An always-on scheduler that runs the pipeline on an interval. And a tiny @scheduler_instance module to solve a circular-import problem that appears once the stats endpoint needs to read the scheduler's state. The stats endpoint and the dashboard panel sit on top of all four.
 
-The diagram below shows how these fit together — the scheduler firing a run, every action writing through a lock to the database, the database restoring the state on boot, and a delivery feeding the score update.
+The diagram below shows how these fit together — the scheduler firing a run, every action writing through a lock to the database, the database restoring the state on boot, and a delivery feeding the score update — the closing stretch of the decision lifecycle (@decision-lifecycle).
 
 [IMAGE: diagrams/persistence-scheduler.png — How Betsy remembers: the scheduler fires a run every 30 minutes; new log entries and held approvals are written through a single lock into betsy.db; on start-up the server reads both tables back into memory; and a delivered order updates the supplier's score in place.]
 
@@ -111,7 +111,7 @@ How I'll know this worked:
 Start the server cold, check the stats, and confirm the scheduler is active with a next run set. Kill the server, restart it, open @betsy — the approval queue and agent log should be identical to before. That continuity is the proof that memory is no longer fragile.
 
 
-Files: server/db.py, server/scheduler_instance.py, server/routers/stats.py, server/state.py, server/main.py, server/routers/orders.py, tests/test_ema_learning.py
-Diagrams: diagrams/persistence-scheduler.png
-Source: bpm_analysis.html, docs/test-report-dl06.md
+Files: @db, @scheduler_instance, @stats, @state, @main, @orders, @test_ema_learning
+Diagrams: @persistence-scheduler, @decision-lifecycle
+Source: @bpm_analysis, @test-report-dl06
 LO stages: Designing, Realizing, Managing

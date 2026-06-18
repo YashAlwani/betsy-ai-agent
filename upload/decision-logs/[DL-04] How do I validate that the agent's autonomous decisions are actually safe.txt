@@ -41,7 +41,7 @@ The AI narrative is generated in the browser from that same data — no model ca
 
 [IMAGE: decision_logs/images/dl04-betsy-live-data.png — Betsy's page in the browser: the live AI narrative, the Risk column in the inventory table, and the Betsy Score column in the supplier table, all pulling from the live API.]
 
-The run trigger was the missing piece. Before this sprint the agent could only be started from a terminal. The new run-agent endpoint hands the pipeline to the server's background-task mechanism — it returns immediately so the browser does not hang waiting on a thirty-second model call, and the five-second auto-refresh picks up the result. The scenario chips on Betsy's page post to this endpoint (@main).
+The run trigger was the missing piece. Before this sprint the agent could only be started from a terminal. The new run-agent endpoint hands the pipeline to the server's background-task mechanism — it returns immediately so the browser does not hang waiting on a thirty-second model call, and the five-second auto-refresh picks up the result. The scenario chips on Betsy's page post to this run-agent endpoint ¹@api-control-layer.
 
 [IMAGE: decision_logs/images/dl04-run-betsy-controls.png — The scenario chip row on Betsy's page: stockout selected and highlighted, the Run Betsy button showing a spinner, and a status line reading "Agent running — updating in ~10s..."]
 
@@ -51,7 +51,7 @@ The Lab phase was running the scenario for real. On the first stockout run the a
 
 [IMAGE: decision_logs/images/dl04-pipeline-first-run.png — Terminal output of the stockout run: "Detected 2 conditions: DUPLICATE_INVOICE warning, STOCKOUT critical" and "Actions: FLAG_DUPLICATE pending_human_review, GENERATE_PO pending_human_review".]
 
-This felt like a failure. It was not. The stockout scenario orders the full gap between current and maximum stock — 955 units of SKU-003 at $12.50 each, an $11,937 purchase order. The safeguard in the decide node checks the order total against the $5,000 autonomous spending limit and flips the decision to human review when it is exceeded — and that flag cannot be overridden by model reasoning (@decide). The safeguard was working exactly as designed. This is the behaviour that stops Betsy from accidentally ordering $50,000 of the wrong thing at three in the morning.
+This felt like a failure. It was not. The stockout scenario orders the full gap between current and maximum stock — 955 units of SKU-003 at $12.50 each, an $11,937 purchase order. The safeguard in the decide node checks the order total against the $5,000 autonomous spending limit and flips the decision to human review when it is exceeded — the auto-approve-or-escalate split drawn in @decision-lifecycle — and that flag cannot be overridden by model reasoning (@decide). The safeguard was working exactly as designed. This is the behaviour that stops Betsy from accidentally ordering $50,000 of the wrong thing at three in the morning.
 
 This is the same checkpoint the before-and-after analysis draws as the decision gateway in the TO-BE process: anomaly or over $5k goes to Jenny, everything else auto-sends (@bpm_analysis). The deeper finding is that "the bot did nothing" is the right outcome for a high-value order. Autonomous does not mean unconditional — it means acting without a human when it is safe to, and escalating when it is not. The boundary between the two is the $5,000 limit, the duplicate-invoice rule, and the price-spike threshold. All three held up under the first real test.
 
@@ -88,7 +88,7 @@ How I'll know this worked:
 Run the stockout scenario, watch the agent-log entry appear in @index without refreshing, then open @betsy and see the narrative mention the stockout. If all three happen in one uninterrupted flow, the implementation is working.
 
 
-Files: dashboard/betsy.html, dashboard/index.html, server/main.py, shared/llm.py, pipeline/nodes/decide.py
-Diagrams: diagrams/gap-to-be.png, diagrams/gap-scenario-stockout.png
-Source: bpm_analysis.html, docs/api-control-layer.md
+Files: @betsy, @index, ¹@main, @llm, @decide
+Diagrams: @gap-to-be, @gap-scenario-stockout, @decision-lifecycle
+Source: @bpm_analysis, @api-control-layer
 LO stages: Realizing, Managing

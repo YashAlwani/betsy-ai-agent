@@ -90,7 +90,7 @@ How I'll know this worked:
 Configure mail in the interface, run the stockout scenario, watch the desktop toast appear, and check the inbox for the email with the approval details. Then clear the notification email address and run again — no email is sent and no error is thrown.
 
 
-Files: server/config.py, server/notifier.py, server/routers/notifications.py, tests/test_notifier.py, server/main.py, server/routers/approvals.py, server/routers/orders.py, dashboard/betsy.html, requirements.txt
-Diagrams: diagrams/notifications.png
-Source: bpm_analysis.html
+Files: @config, @notifier, @notifications-router, @test_notifier, @main, @approvals, @orders, @betsy, @requirements
+Diagrams: @notifications
+Source: @bpm_analysis
 LO stages: Realizing, Managing
