@@ -130,6 +130,79 @@
     gap: 20px;
   }
 
+  /* ── COMMAND CENTER LAYOUT ── */
+  .cmd-wrap {
+    max-width: 1380px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+  .layout {
+    max-width: 1380px;
+    margin: 0 auto;
+    padding: 20px 28px 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 20px;
+    align-items: start;
+  }
+  .col-main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+  }
+  .col-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: sticky;
+    top: 66px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+  }
+  .side-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .side-title {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .side-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .side-row:last-child { margin-bottom: 0; }
+  .day-display {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+  .day-date { font-size: 12px; color: var(--muted); }
+  .inject-chip {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 6px;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    .col-side { position: static; max-height: none; overflow-y: visible; }
+  }
+
   /* ── AI NARRATIVE ── */
   .narrative-card {
     background: var(--ai-bg);
@@ -702,15 +775,18 @@
 </header>
 
 <!-- COMMAND RESPONSE -->
-<div class="main" style="padding-bottom:0; gap:0;">
+<div class="cmd-wrap" style="padding-top:12px;">
   <div class="cmd-response" id="cmd-response">
     <div class="cmd-res-label">✦ Betsy</div>
     <div id="cmd-res-text"></div>
   </div>
 </div>
 
-<!-- MAIN CONTENT -->
-<div class="main">
+<!-- COMMAND CENTER -->
+<div class="layout">
+
+<!-- MAIN COLUMN -->
+<div class="col-main">
 
   <!-- AI NARRATIVE -->
   <div class="narrative-card">
@@ -748,102 +824,19 @@
     </div>
   </div>
 
-  <!-- QUICK ACTIONS -->
-  <div class="quick-row">
-    <span class="quick-label">Jump to</span>
-    <button class="quick-chip" onclick="scrollTo('inv-section')">📦 Inventory</button>
-    <button class="quick-chip" onclick="scrollTo('sup-section')">🏭 Suppliers</button>
-    <button class="quick-chip" onclick="scrollTo('approval-section')">✋ Approvals</button>
-    <button class="quick-chip" onclick="scrollTo('log-section')">📋 Decision log</button>
-    <button class="quick-chip" onclick="window.open('/', '_blank')">🔧 Environment</button>
-  </div>
-
-  <!-- SIM CLOCK CONTROLS -->
-  <div class="run-bar">
-    <span class="run-label">World clock</span>
-    <span id="sim-day" style="font-weight:800;font-size:14px;">Day —</span>
-    <span id="sim-date" style="color:var(--muted);font-size:12px;"></span>
-    <button class="scenario-chip" id="clock-toggle" onclick="toggleClock()">▶ Play</button>
-    <button class="scenario-chip" onclick="stepDays(1)">+1 day</button>
-    <button class="scenario-chip" onclick="stepDays(7)">+7 days</button>
-    <select class="scenario-chip" id="speed-select" onchange="setSpeed()" style="cursor:pointer;">
-      <option value="20">🐢 20s / day</option>
-      <option value="10" selected>▶ 10s / day</option>
-      <option value="5">⏩ 5s / day</option>
-      <option value="2">🚀 2s / day</option>
-    </select>
-    <span class="run-status" id="clock-status"></span>
-  </div>
-
-  <!-- EVENT INJECTION + AGENT CONTROLS -->
-  <div class="run-bar">
-    <span class="run-label">Inject event</span>
-    <button class="scenario-chip" onclick="injectScript('stockout_warning', this)">📦 Stockout</button>
-    <button class="scenario-chip" onclick="injectScript('price_spike', this)">⚠️ Price spike</button>
-    <button class="scenario-chip" onclick="injectScript('duplicate_invoice', this)">🔴 Duplicate invoice</button>
-    <button class="scenario-chip" onclick="injectScript('supplier_oos', this)">🚫 Supplier OOS</button>
-    <button class="scenario-chip reset-chip" onclick="resetWorld()">↺ Reset world</button>
-    <span class="run-status" id="run-status"></span>
-    <button class="run-btn" id="run-btn" onclick="runAgent()">
-      <div class="spinner" id="spinner"></div>
-      <span id="run-btn-label">✦ Run Betsy</span>
-    </button>
-  </div>
-
-  <!-- WORLD EVENT FEED -->
-  <div class="log-section" id="event-section" style="margin-top:4px;">
+  <!-- APPROVALS -->
+  <div class="approval-section" id="approval-section">
     <div class="section-header">
-      <span class="section-title" style="font-size:13px;">World activity</span>
-      <span class="ai-col-note">live feed from the simulation</span>
-    </div>
-    <div class="log-list" id="event-list" style="max-height:180px;overflow-y:auto;">
-      <div class="empty-log">Press ▶ Play to start the world.</div>
-    </div>
-  </div>
-
-  <!-- NOTIFICATION SETTINGS -->
-  <div class="notif-panel" id="notif-panel">
-    <div class="notif-header" onclick="toggleNotifPanel()">
-      <span class="notif-title">
-        <span class="notif-status-dot off" id="notif-dot"></span>
-        Notifications
-      </span>
-      <span class="notif-toggle-icon" id="notif-chevron">▶</span>
-    </div>
-    <div class="notif-body" id="notif-body">
-      <div class="notif-grid">
-        <div class="notif-field">
-          <label>Email address</label>
-          <input type="email" id="notif-email" placeholder="jenny@company.com" />
-        </div>
-        <div class="notif-field">
-          <label>SMTP user (sender)</label>
-          <input type="email" id="notif-smtp-user" placeholder="betsy-alerts@gmail.com" />
-        </div>
-        <div class="notif-field">
-          <label>SMTP password / app password</label>
-          <input type="password" id="notif-smtp-pass" placeholder="••••••••••••••••" />
-        </div>
-        <div class="notif-field">
-          <label>SMTP host : port</label>
-          <input type="text" id="notif-smtp-host" placeholder="smtp.gmail.com:587" />
-        </div>
+      <div style="display:flex;align-items:center;">
+        <span class="section-title">Needs your OK</span>
+        <span class="approval-count-badge" id="approval-badge" style="display:none">0</span>
       </div>
-
-      <div style="margin-bottom:10px;">
-        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Notify me when</span>
-      </div>
-      <div class="notif-toggles">
-        <span class="notif-toggle-chip on" data-key="approval"   onclick="toggleChip(this)">✋ Approval needed</span>
-        <span class="notif-toggle-chip on" data-key="duplicate"  onclick="toggleChip(this)">🔴 Duplicate invoice</span>
-        <span class="notif-toggle-chip on" data-key="score_drop" onclick="toggleChip(this)">⬇ Supplier score drops</span>
-        <span class="notif-toggle-chip"    data-key="auto_po"    onclick="toggleChip(this)">✓ Auto-approved PO</span>
-      </div>
-
-      <div class="notif-actions">
-        <button class="notif-save-btn" onclick="saveNotifSettings()">Save settings</button>
-        <button class="notif-test-btn" onclick="sendTestNotification()">Send test</button>
-        <span class="notif-hint" id="notif-hint"></span>
+      <span class="ai-col-note">✦ Betsy stopped here — these need a human call</span>
+    </div>
+    <div id="approval-list">
+      <div class="empty-approvals">
+        <div class="empty-icon">✅</div>
+        <div class="empty-msg">Nothing waiting for your approval right now.</div>
       </div>
     </div>
   </div>
@@ -896,23 +889,6 @@
     </div>
   </div>
 
-  <!-- APPROVALS -->
-  <div class="approval-section" id="approval-section">
-    <div class="section-header">
-      <div style="display:flex;align-items:center;">
-        <span class="section-title">Needs your OK</span>
-        <span class="approval-count-badge" id="approval-badge" style="display:none">0</span>
-      </div>
-      <span class="ai-col-note">✦ Betsy stopped here — these need a human call</span>
-    </div>
-    <div id="approval-list">
-      <div class="empty-approvals">
-        <div class="empty-icon">✅</div>
-        <div class="empty-msg">Nothing waiting for your approval right now.</div>
-      </div>
-    </div>
-  </div>
-
   <!-- DECISION LOG -->
   <div class="log-section" id="log-section">
     <div class="section-header">
@@ -923,11 +899,116 @@
       <button class="chip chip-ghost" style="font-size:11px;padding:4px 12px;" onclick="clearLog()">Clear</button>
     </div>
     <div class="log-list" id="log-list">
-      <div class="empty-log">No decisions yet — run a scenario to see Betsy's reasoning here.</div>
+      <div class="empty-log">No decisions yet — press ▶ Play and let Betsy work.</div>
     </div>
   </div>
 
-</div><!-- .main -->
+</div><!-- .col-main -->
+
+<!-- SIDEBAR -->
+<aside class="col-side">
+
+  <!-- WORLD CLOCK -->
+  <div class="side-panel">
+    <div class="side-title">World clock <a href="/" target="_blank" style="font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted);">dev view ↗</a></div>
+    <div class="side-row">
+      <div>
+        <div class="day-display" id="sim-day">Day —</div>
+        <div class="day-date" id="sim-date"></div>
+      </div>
+      <button class="scenario-chip" id="clock-toggle" onclick="toggleClock()" style="margin-left:auto;font-size:13px;padding:8px 16px;">▶ Play</button>
+    </div>
+    <div class="side-row">
+      <button class="scenario-chip" onclick="stepDays(1)">+1 day</button>
+      <button class="scenario-chip" onclick="stepDays(7)">+7 days</button>
+      <select class="scenario-chip" id="speed-select" onchange="setSpeed()" style="cursor:pointer;flex:1;">
+        <option value="20">🐢 20s / day</option>
+        <option value="10" selected>▶ 10s / day</option>
+        <option value="5">⏩ 5s / day</option>
+        <option value="2">🚀 2s / day</option>
+      </select>
+    </div>
+    <div class="run-status" id="clock-status"></div>
+  </div>
+
+  <!-- BETSY -->
+  <div class="side-panel">
+    <div class="side-title">Agent</div>
+    <button class="run-btn" id="run-btn" onclick="runAgent()" style="width:100%;justify-content:center;">
+      <div class="spinner" id="spinner"></div>
+      <span id="run-btn-label">✦ Run Betsy now</span>
+    </button>
+    <div class="run-status" id="run-status" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- INJECT EVENTS -->
+  <div class="side-panel">
+    <div class="side-title">Inject event</div>
+    <button class="scenario-chip inject-chip" onclick="injectScript('stockout_warning', this)">📦 Stockout</button>
+    <button class="scenario-chip inject-chip" onclick="injectScript('price_spike', this)">⚠️ Price spike</button>
+    <button class="scenario-chip inject-chip" onclick="injectScript('duplicate_invoice', this)">🔴 Duplicate invoice</button>
+    <button class="scenario-chip inject-chip" onclick="injectScript('supplier_oos', this)">🚫 Supplier outage</button>
+    <button class="scenario-chip inject-chip reset-chip" onclick="resetWorld()" style="margin-top:8px;">↺ Reset world</button>
+  </div>
+
+  <!-- WORLD ACTIVITY FEED -->
+  <div class="side-panel" style="padding-bottom:6px;">
+    <div class="side-title">World activity</div>
+    <div id="event-list" style="max-height:300px;overflow-y:auto;margin:0 -16px;">
+      <div class="empty-log">Press ▶ Play to start the world.</div>
+    </div>
+  </div>
+
+  <!-- NOTIFICATION SETTINGS -->
+  <div class="notif-panel" id="notif-panel">
+    <div class="notif-header" onclick="toggleNotifPanel()">
+      <span class="notif-title">
+        <span class="notif-status-dot off" id="notif-dot"></span>
+        Notifications
+      </span>
+      <span class="notif-toggle-icon" id="notif-chevron">▶</span>
+    </div>
+    <div class="notif-body" id="notif-body">
+      <div class="notif-grid" style="grid-template-columns:1fr;">
+        <div class="notif-field">
+          <label>Email address</label>
+          <input type="email" id="notif-email" placeholder="jenny@company.com" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP user (sender)</label>
+          <input type="email" id="notif-smtp-user" placeholder="betsy-alerts@gmail.com" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP password / app password</label>
+          <input type="password" id="notif-smtp-pass" placeholder="••••••••••••••••" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP host : port</label>
+          <input type="text" id="notif-smtp-host" placeholder="smtp.gmail.com:587" />
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Notify me when</span>
+      </div>
+      <div class="notif-toggles">
+        <span class="notif-toggle-chip on" data-key="approval"   onclick="toggleChip(this)">✋ Approval needed</span>
+        <span class="notif-toggle-chip on" data-key="duplicate"  onclick="toggleChip(this)">🔴 Duplicate invoice</span>
+        <span class="notif-toggle-chip on" data-key="score_drop" onclick="toggleChip(this)">⬇ Score drops</span>
+        <span class="notif-toggle-chip"    data-key="auto_po"    onclick="toggleChip(this)">✓ Auto-approved PO</span>
+      </div>
+
+      <div class="notif-actions">
+        <button class="notif-save-btn" onclick="saveNotifSettings()">Save settings</button>
+        <button class="notif-test-btn" onclick="sendTestNotification()">Send test</button>
+        <span class="notif-hint" id="notif-hint"></span>
+      </div>
+    </div>
+  </div>
+
+</aside><!-- .col-side -->
+
+</div><!-- .layout -->
 
 <div class="toast" id="toast"></div>
 
@@ -1462,12 +1543,14 @@
   }
 
   function renderAgentStatus(a) {
-    const status = document.getElementById('clock-status');
+    const status = document.getElementById('run-status');
     if (!a) return;
     if (a.running) {
       status.textContent = `✦ Betsy is thinking (day ${a.run_day ?? '…'})`;
-    } else if (status.textContent.startsWith('✦')) {
-      status.textContent = '';
+    } else if (status.textContent.startsWith('✦ Betsy is thinking')) {
+      status.textContent = `idle · runs every ${a.cadence_days} sim day(s)`;
+    } else if (!status.textContent) {
+      status.textContent = `idle · runs every ${a.cadence_days} sim day(s)`;
     }
   }
 
