@@ -31,20 +31,24 @@ PRECEDENCE = {
 # ── Graph nodes ───────────────────────────────────────────────────────────────
 
 def build_brief_node(state: OrchestraState) -> dict:
-    """Fetch all data once. Build immutable brief for all agents."""
+    """Fetch all data once. Build immutable brief for all agents.
+
+    World data comes from a single consistent snapshot (can't be split across
+    a tick boundary); suppliers come from Betsy's API so the brief carries her
+    learned reliability scores rather than anything the world claims."""
     try:
-        inventory = api.get_inventory()
+        snapshot  = api.get_snapshot()
         suppliers = api.get_suppliers()
-        all_pos   = api.get_purchase_orders()
-        invoices  = api.get_invoices()
+        all_pos   = snapshot["purchase_orders"]
         open_pos  = [po for po in all_pos if po.get("status") not in {"delivered", "cancelled"}]
         return {
             "brief": {
-                "inventory": inventory,
+                "inventory": snapshot["inventory"],
                 "suppliers": suppliers,
                 "all_pos": all_pos,
                 "open_pos": open_pos,
-                "invoices": invoices,
+                "invoices": snapshot["invoices"],
+                "clock": snapshot.get("clock", {}),
             },
             "inventory_findings": [],
             "supplier_findings": [],

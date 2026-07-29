@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -7,43 +6,59 @@ from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from server.routers import inventory, suppliers, orders, invoices, scenarios, agent_log, approvals, stats, notifications
+from server import agent_loop, db
+from server.routers import (
+    agent_log,
+    approvals,
+    inventory,
+    invoices,
+    notifications,
+    orders,
+    sim,
+    stats,
+    suppliers,
+)
 from server.scheduler_instance import scheduler
+from shared import world_client
 
 DASHBOARD = Path(__file__).parent.parent / "dashboard" / "index.html"
 BETSY     = Path(__file__).parent.parent / "dashboard" / "betsy.html"
 
-logger = logging.getLogger("betsy.scheduler")
-
-
-def _scheduled_run() -> None:
-    try:
-        from pipeline.run import run_full
-        run_full(scenario=None)
-    except Exception as exc:
-        logger.error("Scheduled run failed: %s", exc)
+logger = logging.getLogger("betsy.main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    interval = int(os.getenv("AGENT_INTERVAL_MINUTES", "30"))
+    db.init_db()
+    if not world_client.is_up():
+        logger.warning(
+            "World service not reachable at %s — start it with: python run_world.py",
+            world_client.WORLD_BASE,
+        )
     scheduler.add_job(
-        _scheduled_run,
+        agent_loop.poll_once,
         trigger="interval",
-        minutes=interval,
-        id="betsy_auto_run",
+        seconds=agent_loop.POLL_SECONDS,
+        id="betsy_agent_poll",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
     scheduler.start()
-    logger.info("Scheduler started — auto-run every %d min", interval)
+    logger.info(
+        "Agent loop started — polling world clock every %.0fs, runs every %d sim day(s)",
+        agent_loop.POLL_SECONDS, agent_loop.AGENT_RUN_EVERY_DAYS,
+    )
     yield
     scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
-    title="Betsy Mock Server",
-    description="Mock procurement API for the Betsy autonomous agent",
-    version="0.1.0",
+    title="Betsy",
+    description="Autonomous procurement agent: lifecycle loop, approvals, "
+                "supplier learning, notifications. Talks to the world (simulated ERP) "
+                "through the WorldClient adapter.",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -58,7 +73,7 @@ app.include_router(inventory.router)
 app.include_router(suppliers.router)
 app.include_router(orders.router)
 app.include_router(invoices.router)
-app.include_router(scenarios.router)
+app.include_router(sim.router)
 app.include_router(agent_log.router)
 app.include_router(approvals.router)
 app.include_router(stats.router)
@@ -75,18 +90,24 @@ def betsy_dashboard():
     return str(BETSY)
 
 
+@app.get("/api/agent-status", tags=["agent"])
+def agent_status():
+    return agent_loop.status()
+
+
 @app.post("/api/run-agent", tags=["agent"])
-def run_agent(background_tasks: BackgroundTasks, scenario: str = "", mode: str = "pipeline"):
+def run_agent(background_tasks: BackgroundTasks, mode: str = "orchestra"):
+    """Manual trigger (in addition to the automatic clock-driven loop)."""
     def _run():
-        if mode == "orchestra":
-            from orchestra.run import run_full
-        else:
+        if mode == "pipeline":
             from pipeline.run import run_full
-        run_full(scenario=scenario or None)
+        else:
+            from orchestra.run import run_full
+        run_full()
     background_tasks.add_task(_run)
-    return {"status": "started", "mode": mode, "scenario": scenario or "normal"}
+    return {"status": "started", "mode": mode}
 
 
 @app.get("/health", tags=["root"])
 def health():
-    return {"status": "ok", "docs": "/docs"}
+    return {"status": "ok", "docs": "/docs", "world_up": world_client.is_up()}

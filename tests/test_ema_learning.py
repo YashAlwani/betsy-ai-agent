@@ -1,131 +1,120 @@
 """
-EMA learning loop evidence script.
-Requires server running at localhost:8000.
+DL-06 evidence script — EMA learning in the live two-service setup.
 
-Usage: python tests/test_ema_learning.py
+Requires both services running:
+  python run_world.py
+  python run_server.py
+
+Usage:
+  python tests/test_ema_learning.py
+
+What it does:
+  1. Resets the world and pauses the clock.
+  2. Reads Betsy's learned scores (bootstrapped from seeded delivery history).
+  3. Places a PO, steps the sim until it delivers, waits for Betsy's agent
+     loop to observe it, and asserts the EMA moved by exactly
+     alpha * performance + (1 - alpha) * old.
 """
-import json
-from datetime import datetime, timedelta
+import sys
+import time
+from pathlib import Path
 
 import httpx
 
-BASE = "http://localhost:8000"
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+BETSY = "http://localhost:8000"
+ALPHA = 0.2
 
 
-def get(path):
-    return httpx.get(f"{BASE}{path}", timeout=5).json()
+def ema_expected(old: float, performance: float) -> float:
+    return round(min(1.0, max(0.0, ALPHA * performance + (1 - ALPHA) * old)), 4)
 
 
-def patch(path, **params):
-    return httpx.patch(f"{BASE}{path}", params=params, timeout=5).json()
+def get_scores() -> dict:
+    return httpx.get(f"{BETSY}/api/suppliers/scores", timeout=10).json()
 
 
-def post(path, body=None):
-    return httpx.post(f"{BASE}{path}", json=body or {}, timeout=5).json()
+def wait_for_observation(po_id: str, timeout_s: int = 30) -> dict | None:
+    """Poll the agent log until the EMA update for this PO appears."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        log = httpx.get(f"{BETSY}/api/agent-log", timeout=10).json()
+        for entry in reversed(log):
+            if (entry.get("trigger") == "ema_score_update"
+                    and entry.get("metadata", {}).get("po_id") == po_id):
+                return entry
+        time.sleep(2)
+    return None
 
 
-def supplier_score(supplier_id):
-    suppliers = get("/api/suppliers")
-    s = next((x for x in suppliers if x["supplier_id"] == supplier_id), None)
-    return s["reliability_score"] if s else None
+def main() -> int:
+    print("=" * 60)
+    print("EMA LEARNING EVIDENCE — two-service architecture")
+    print("=" * 60)
 
+    try:
+        health = httpx.get(f"{BETSY}/health", timeout=3).json()
+    except Exception:
+        print("ERROR: Betsy not reachable. Start both services first.")
+        return 1
+    if not health.get("world_up", True):
+        print("ERROR: world service not reachable from Betsy.")
+        return 1
 
-def create_test_po(supplier_id, sku_id, expected_delivery_iso):
-    body = {
-        "supplier_id": supplier_id,
-        "sku_id": sku_id,
-        "quantity": 10,
-        "unit_price": 1.0,
-        "reason": "EMA test",
-        "requested_by": "test_ema_learning",
-    }
-    po = post("/api/purchase-orders", body)
-    # Override expected_delivery to control lateness
-    for order in get("/api/purchase-orders"):
-        if order["po_id"] == po["po_id"]:
-            order["expected_delivery"] = expected_delivery_iso
-    return po["po_id"]
+    print("\n[1] Reset world, pause clock")
+    httpx.post(f"{BETSY}/api/sim/reset", timeout=30)
+    httpx.post(f"{BETSY}/api/sim/clock/pause", timeout=10)
 
+    print("[2] Waiting for Betsy to bootstrap scores from seeded history...")
+    time.sleep(6)  # one or two agent-loop polls
+    before = get_scores()
+    print(f"    Learned scores for {len(before)} suppliers")
+    for sid, s in sorted(before.items()):
+        print(f"      {sid}: {s['reliability_score']:.4f} ({s['deliveries_observed']} deliveries)")
 
-def ema_expected(old, performance, alpha=0.2):
-    return round(min(1.0, max(0.0, alpha * performance + (1 - alpha) * old)), 4)
+    supplier = "SUP-001"
 
+    print(f"\n[3] Placing PO with {supplier} (lead 2 days), stepping sim until delivery")
+    po = httpx.post(f"{BETSY}/api/purchase-orders", json={
+        "supplier_id": supplier, "sku_id": "SKU-003",
+        "quantity": 100, "unit_price": 12.50,
+        "reason": "EMA evidence test", "requested_by": "test-script",
+    }, timeout=10).json()
+    print(f"    {po['po_id']} expected {po['expected_delivery']}")
 
-def run():
-    print("\n" + "=" * 65)
-    print("Betsy EMA Learning Loop Test")
-    print(f"Server: {BASE}")
-    print("=" * 65)
+    delivered = None
+    for _ in range(12):
+        httpx.post(f"{BETSY}/api/sim/clock/step", params={"days": 1}, timeout=60)
+        orders = httpx.get(f"{BETSY}/api/purchase-orders", timeout=10).json()
+        state = next(o for o in orders if o["po_id"] == po["po_id"])
+        if state["status"] == "delivered":
+            delivered = state
+            break
+    if not delivered:
+        print("ERROR: PO not delivered within 12 sim days")
+        return 1
+    print(f"    Delivered {delivered['actual_delivery']}")
 
-    # ── Target: PrecisionParts GmbH (SUP-004, highest baseline score 0.97)
-    SUP = "SUP-004"
-    SKU = "SKU-001"  # supplied by SUP-004
+    print("[4] Waiting for Betsy's agent loop to observe the delivery...")
+    entry = wait_for_observation(po["po_id"])
+    if not entry:
+        print("ERROR: no ema_score_update log entry appeared (is the agent loop running?)")
+        return 1
 
-    baseline = supplier_score(SUP)
-    if baseline is None:
-        print(f"ERROR: supplier {SUP} not found — is the server running?")
-        return
+    meta = entry["metadata"]
+    lateness = meta["lateness_days"]
+    performance = max(0.0, 1.0 - lateness * 0.1)
+    expected = ema_expected(meta["old_score"], performance)
+    actual = meta["new_score"]
+    print(f"    lateness={lateness}d performance={performance:.2f}")
+    print(f"    score {meta['old_score']:.4f} -> {actual:.4f} (expected {expected:.4f})")
 
-    print(f"\nSupplier:  PrecisionParts GmbH ({SUP})")
-    print(f"Baseline score: {baseline:.4f}")
-
-    results = [("Baseline", baseline, "—", "—")]
-
-    # ── Test 1: on-time delivery ──────────────────────────────────────────
-    print("\n[1] On-time delivery (lateness = 0 days)")
-    today = datetime.now().isoformat()
-    po1 = create_test_po(SUP, SKU, today)
-    patch(f"/api/purchase-orders/{po1}/status", status="in_transit")
-    r1 = patch(f"/api/purchase-orders/{po1}/status", status="delivered",
-               actual_delivery=today)
-
-    score_after_ontime = supplier_score(SUP)
-    expected_1 = ema_expected(baseline, 1.0)
-    match1 = "PASS" if abs(score_after_ontime - expected_1) < 0.0001 else "FAIL"
-    print(f"   Score: {baseline:.4f} -> {score_after_ontime:.4f}  "
-          f"(expected {expected_1:.4f})  {match1}")
-    print(f"   Formula: 0.2×1.0 + 0.8×{baseline:.4f} = {expected_1:.4f}")
-    results.append(("After on-time delivery", score_after_ontime, expected_1, match1))
-
-    # ── Test 2: 5-day late delivery ───────────────────────────────────────
-    print("\n[2] Late delivery (+5 days)")
-    po2 = create_test_po(SUP, SKU, datetime.now().isoformat())
-
-    # Fetch the PO to get the server-assigned expected_delivery, then arrive 5 days late
-    po2_data = next(o for o in get("/api/purchase-orders") if o["po_id"] == po2)
-    expected_dt = datetime.fromisoformat(po2_data["expected_delivery"][:19])
-    actual_dt   = (expected_dt + timedelta(days=5)).isoformat()
-
-    patch(f"/api/purchase-orders/{po2}/status", status="in_transit")
-    patch(f"/api/purchase-orders/{po2}/status", status="delivered",
-          actual_delivery=actual_dt)
-
-    score_after_late = supplier_score(SUP)
-    perf_late        = max(0.0, 1.0 - 5 * 0.1)  # = 0.5
-    expected_2       = ema_expected(score_after_ontime, perf_late)
-    match2 = "PASS" if abs(score_after_late - expected_2) < 0.0001 else "FAIL"
-    print(f"   Score: {score_after_ontime:.4f} -> {score_after_late:.4f}  "
-          f"(expected {expected_2:.4f})  {match2}")
-    print(f"   Formula: 0.2×{perf_late:.1f} + 0.8×{score_after_ontime:.4f} = {expected_2:.4f}")
-    results.append(("After 5-day late delivery", score_after_late, expected_2, match2))
-
-    # ── Summary table ─────────────────────────────────────────────────────
-    print("\n" + "-" * 65)
-    print(f"{'State':<30} {'Score':>8}  {'Expected':>10}  {'Pass':>5}")
-    print("-" * 65)
-    for label, score, exp, match in results:
-        exp_str = f"{exp:.4f}" if isinstance(exp, float) else str(exp)
-        print(f"{label:<30} {score:>8.4f}  {exp_str:>10}  {match:>5}")
-    print("-" * 65)
-
-    passed = sum(1 for _, _, _, m in results[1:] if m == "PASS")
-    total  = len(results) - 1
-    print(f"\n{passed}/{total} checks passed")
-    print("\nKey finding: on-time delivery raises the score, "
-          "late delivery lowers it.")
-    print("Betsy will prefer higher-scoring suppliers in future runs.")
-    print("=" * 65 + "\n")
+    ok = abs(actual - expected) < 1e-6
+    print("\n" + ("PASS: EMA math verified against live delivery" if ok else "FAIL: EMA mismatch"))
+    print("=" * 60)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    run()
+    sys.exit(main())

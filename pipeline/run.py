@@ -9,10 +9,10 @@ Usage:
   python -m pipeline.run --stage decide
   python -m pipeline.run --stage act
   python -m pipeline.run --stage audit
-  python -m pipeline.run --scenario stockout_warning   # inject + full run
-  python -m pipeline.run --scenario price_spike
-  python -m pipeline.run --scenario duplicate_invoice
-  python -m pipeline.run --scenario supplier_oos
+
+Kept as a comparison artifact (DL-04); orchestra is the production agent.
+To create a situation to react to, inject a sim event script first, e.g.:
+  curl -X POST http://localhost:8000/api/sim/scripts/price_spike
 """
 import argparse
 import subprocess
@@ -36,11 +36,7 @@ STAGE_MODULES = {
 }
 
 
-def run_full(scenario: str | None = None) -> dict:
-    if scenario:
-        print(f"\nInjecting scenario: {scenario}")
-        api.inject_scenario(scenario)
-
+def run_full() -> dict:
     print("\n" + "=" * 60)
     print("PIPELINE -- Full run")
     print("=" * 60)
@@ -57,10 +53,6 @@ def run_full(scenario: str | None = None) -> dict:
     elapsed = time.time() - t0
 
     _print_results(final, elapsed)
-
-    if scenario:
-        api.reset_scenario()
-
     return final
 
 
@@ -105,14 +97,13 @@ def run_stage(stage: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Betsy Pipeline")
     parser.add_argument("--stage", help="Test a single stage in isolation")
-    parser.add_argument("--scenario", help="Inject a test scenario then run full pipeline")
     args = parser.parse_args()
 
     if args.stage:
         run_stage(args.stage)
     else:
         if not api.is_server_up():
-            print(f"ERROR: API not reachable at {api.API_BASE}")
-            print("Start with: uvicorn server.main:app --reload --port 8000")
+            print(f"ERROR: Betsy API not reachable at {api.API_BASE}")
+            print("Start with: python run_server.py  (and the world: python run_world.py)")
             sys.exit(1)
-        run_full(scenario=args.scenario)
+        run_full()

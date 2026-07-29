@@ -1,0 +1,13 @@
+{
+  "name": "price_spike",
+  "description": "All suppliers raise SKU-003 Steel Rod prices 30-70% above historical average — Betsy should flag for human approval instead of auto-ordering.",
+  "expected_agent_action": "flag_for_approval",
+  "events": [
+    {"day_offset": 0, "type": "price_change", "payload": {"supplier_id": "SUP-001", "sku_id": "SKU-003", "unit_price": 20.00}},
+    {"day_offset": 0, "type": "price_change", "payload": {"supplier_id": "SUP-002", "sku_id": "SKU-003", "unit_price": 15.70}},
+    {"day_offset": 0, "type": "price_change", "payload": {"supplier_id": "SUP-003", "sku_id": "SKU-003", "unit_price": 24.00}},
+    {"day_offset": 0, "type": "price_change", "payload": {"supplier_id": "SUP-004", "sku_id": "SKU-003", "unit_price": 17.90}},
+    {"day_offset": 0, "type": "price_change", "payload": {"supplier_id": "SUP-005", "sku_id": "SKU-003", "unit_price": 13.60}},
+    {"day_offset": 0, "type": "stock_set", "payload": {"sku_id": "SKU-003", "current_stock": 150}}
+  ]
+}

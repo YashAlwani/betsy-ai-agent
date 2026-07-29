@@ -43,7 +43,27 @@ def init_db() -> None:
                 created_at  TEXT NOT NULL,
                 resolved_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS supplier_scores (
+                supplier_id          TEXT PRIMARY KEY,
+                reliability_score    REAL NOT NULL,
+                deliveries_observed  INTEGER NOT NULL DEFAULT 0,
+                updated_at           TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS processed_deliveries (
+                po_id         TEXT PRIMARY KEY,
+                processed_at  TEXT NOT NULL,
+                lateness_days INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_cursor (
+                id           INTEGER PRIMARY KEY CHECK (id = 1),
+                last_run_day INTEGER NOT NULL DEFAULT -1,
+                last_run_at  TEXT
+            );
         """)
+        c.execute("INSERT OR IGNORE INTO agent_cursor (id, last_run_day) VALUES (1, -1)")
 
 
 # ── agent_log ─────────────────────────────────────────────────────────────────
@@ -119,24 +139,100 @@ def update_approval(decision_id: str, status: str, resolved_at: str) -> None:
         )
 
 
+def _approval_row_to_dict(r) -> dict:
+    return {
+        "decision_id": r["decision_id"],
+        "status":      r["status"],
+        "action":      r["action"],
+        "sku_id":      r["sku_id"],
+        "supplier_id": r["supplier_id"],
+        "po_total":    r["po_total"],
+        "qty":         r["qty"],
+        "unit_price":  r["unit_price"],
+        "confidence":  r["confidence"],
+        "reasoning":   r["reasoning"],
+        "payload":     json.loads(r["payload"]) if r["payload"] else None,
+        "created_at":  r["created_at"],
+        "resolved_at": r["resolved_at"],
+    }
+
+
+def load_pending_approvals() -> list:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT * FROM approvals WHERE status = 'pending' ORDER BY id ASC"
+        ).fetchall()
+    return [_approval_row_to_dict(r) for r in rows]
+
+
+def get_approval(decision_id: str) -> dict | None:
+    with _conn() as c:
+        r = c.execute(
+            "SELECT * FROM approvals WHERE decision_id = ?", (decision_id,)
+        ).fetchone()
+    return _approval_row_to_dict(r) if r else None
+
+
 def load_all_approvals() -> list:
     with _conn() as c:
         rows = c.execute("SELECT * FROM approvals ORDER BY id ASC").fetchall()
-    return [
-        {
-            "decision_id": r["decision_id"],
-            "status":      r["status"],
-            "action":      r["action"],
-            "sku_id":      r["sku_id"],
-            "supplier_id": r["supplier_id"],
-            "po_total":    r["po_total"],
-            "qty":         r["qty"],
-            "unit_price":  r["unit_price"],
-            "confidence":  r["confidence"],
-            "reasoning":   r["reasoning"],
-            "payload":     json.loads(r["payload"]) if r["payload"] else None,
-            "created_at":  r["created_at"],
-            "resolved_at": r["resolved_at"],
+    return [_approval_row_to_dict(r) for r in rows]
+
+
+# ── supplier memory (Betsy's learned scores) ──────────────────────────────────
+
+def load_supplier_scores() -> dict:
+    """supplier_id -> {reliability_score, deliveries_observed, updated_at}"""
+    with _conn() as c:
+        rows = c.execute("SELECT * FROM supplier_scores").fetchall()
+    return {
+        r["supplier_id"]: {
+            "reliability_score":   r["reliability_score"],
+            "deliveries_observed": r["deliveries_observed"],
+            "updated_at":          r["updated_at"],
         }
         for r in rows
-    ]
+    }
+
+
+def upsert_supplier_score(supplier_id: str, score: float, deliveries_observed: int) -> None:
+    with _lock, _conn() as c:
+        c.execute(
+            "INSERT INTO supplier_scores (supplier_id, reliability_score, deliveries_observed, updated_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(supplier_id) DO UPDATE SET "
+            "reliability_score = excluded.reliability_score, "
+            "deliveries_observed = excluded.deliveries_observed, "
+            "updated_at = excluded.updated_at",
+            (supplier_id, score, deliveries_observed, datetime.now().isoformat()),
+        )
+
+
+def load_processed_deliveries() -> set:
+    with _conn() as c:
+        rows = c.execute("SELECT po_id FROM processed_deliveries").fetchall()
+    return {r["po_id"] for r in rows}
+
+
+def mark_delivery_processed(po_id: str, lateness_days: int) -> None:
+    with _lock, _conn() as c:
+        c.execute(
+            "INSERT OR IGNORE INTO processed_deliveries (po_id, processed_at, lateness_days) "
+            "VALUES (?, ?, ?)",
+            (po_id, datetime.now().isoformat(), lateness_days),
+        )
+
+
+def get_agent_cursor() -> dict:
+    with _conn() as c:
+        r = c.execute("SELECT * FROM agent_cursor WHERE id = 1").fetchone()
+    return {"last_run_day": r["last_run_day"], "last_run_at": r["last_run_at"]} if r else \
+           {"last_run_day": -1, "last_run_at": None}
+
+
+def set_agent_cursor(day: int) -> None:
+    with _lock, _conn() as c:
+        c.execute(
+            "UPDATE agent_cursor SET last_run_day = ?, last_run_at = ? WHERE id = 1",
+            (day, datetime.now().isoformat()),
+        )

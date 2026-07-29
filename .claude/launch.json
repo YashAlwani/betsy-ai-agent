@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "world",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["run_world.py"],
+      "port": 8001
+    },
+    {
+      "name": "betsy",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["run_server.py", "--no-reload"],
+      "port": 8000
+    }
+  ]
+}
