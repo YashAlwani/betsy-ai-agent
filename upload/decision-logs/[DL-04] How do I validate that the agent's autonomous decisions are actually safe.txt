@@ -1,0 +1,94 @@
+DL-04 — Wiring It Up: Implementation, Model Selection, and What "Autonomous" Actually Means
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+DL-03 closed with a working interactive wireframe and a clear design target. The gap was obvious: @betsy was showing hardcoded demo data, the agent could not be triggered from the browser, and there was no real model decision — Betsy was still defaulting to Mistral 7B, inherited from the initial setup rather than chosen deliberately. This log covers the implementation sprint: wiring @betsy to the live API, choosing a model, adding the run trigger, cleaning up unused dependencies, and then actually running a scenario end to end to see what "autonomous" looks like in practice.
+
+
+1. Research question
+
+How does Betsy's AI layer connect to the procurement environment, and what does autonomous agent behaviour actually look like when it runs against real scenario data?
+
+
+2. Current LO stage
+
+[ ] Analyzing
+[ ] Advising
+[ ] Designing
+[x] Realizing — built the live integration and triggered real agent runs
+[x] Managing — discovered the financial safeguard behaviour and judged what counts as "working"
+
+
+3. What makes a good decision here
+
+Three things have to be true. The dashboard has to show live data with no manual refresh, so a user sees agent decisions appear without touching the page. The model switch has to be justified by a concrete difference in behaviour, not just a version bump. And running a scenario from end to end has to produce an observable change in both the AI tool and the environment — if nothing visibly moves, the loop is not really closed.
+
+
+4. What I decided
+
+Wire @betsy to the live API with a five-second auto-refresh, add a run-agent endpoint as a background task, switch the default model from Mistral 7B to Llama 3.1 8B, and run the stockout scenario to validate the full loop.
+
+
+5. Why this decision
+
+Method: Lab, Field
+
+The implementation started with the connection question: how does @betsy talk to the server? The answer was already in the codebase. @index uses plain fetch() calls against the API — no framework, no build step — and @betsy follows the same pattern. A single Promise.all pulls inventory, suppliers, and the agent log in one shot, same origin, no CORS to fight. The two surfaces share one API, so any action Betsy takes autonomously shows up in both views immediately.
+
+The AI narrative is generated in the browser from that same data — no model call needed for the summary. If stock is below the reorder point and the agent log has a recent purchase-order entry for that SKU, the narrative writes itself: "Steel Bolts were running low — I ordered more automatically." That is about twenty lines of plain JavaScript in @betsy.
+
+[IMAGE: decision_logs/images/dl04-betsy-live-data.png — Betsy's page in the browser: the live AI narrative, the Risk column in the inventory table, and the Betsy Score column in the supplier table, all pulling from the live API.]
+
+The run trigger was the missing piece. Before this sprint the agent could only be started from a terminal. The new run-agent endpoint hands the pipeline to the server's background-task mechanism — it returns immediately so the browser does not hang waiting on a thirty-second model call, and the five-second auto-refresh picks up the result. The scenario chips on Betsy's page post to this run-agent endpoint ¹@api-control-layer.
+
+[IMAGE: decision_logs/images/dl04-run-betsy-controls.png — The scenario chip row on Betsy's page: stockout selected and highlighted, the Run Betsy button showing a spinner, and a status line reading "Agent running — updating in ~10s..."]
+
+On model selection: the project was defaulting to Mistral 7B, inherited from setup. The decision to switch came from one clear observation — Mistral 7B was inconsistent at producing structured JSON, which is exactly what the decide and evaluate nodes depend on. @llm already handles malformed JSON with a fallback, but hitting that fallback every few calls means the agent is running on rule-based logic instead of model reasoning. Llama 3.1 8B follows instructions and holds a JSON schema better for its size class. After deleting Mistral and the unused older models (freeing about 14 GB), Llama 3.1 8B is the only active model, configurable by environment variable and defaulting to llama3.1:8b (@llm).
+
+The Lab phase was running the scenario for real. On the first stockout run the agent did exactly what it should: it detected two conditions — a duplicate invoice on SKU-004 and a stockout on SKU-003 — and decided on both. But both actions came back as pending human review. At first glance the bot had done nothing on its own.
+
+[IMAGE: decision_logs/images/dl04-pipeline-first-run.png — Terminal output of the stockout run: "Detected 2 conditions: DUPLICATE_INVOICE warning, STOCKOUT critical" and "Actions: FLAG_DUPLICATE pending_human_review, GENERATE_PO pending_human_review".]
+
+This felt like a failure. It was not. The stockout scenario orders the full gap between current and maximum stock — 955 units of SKU-003 at $12.50 each, an $11,937 purchase order. The safeguard in the decide node checks the order total against the $5,000 autonomous spending limit and flips the decision to human review when it is exceeded — the auto-approve-or-escalate split drawn in @decision-lifecycle — and that flag cannot be overridden by model reasoning (@decide). The safeguard was working exactly as designed. This is the behaviour that stops Betsy from accidentally ordering $50,000 of the wrong thing at three in the morning.
+
+This is the same checkpoint the before-and-after analysis draws as the decision gateway in the TO-BE process: anomaly or over $5k goes to Jenny, everything else auto-sends (@bpm_analysis). The deeper finding is that "the bot did nothing" is the right outcome for a high-value order. Autonomous does not mean unconditional — it means acting without a human when it is safe to, and escalating when it is not. The boundary between the two is the $5,000 limit, the duplicate-invoice rule, and the price-spike threshold. All three held up under the first real test.
+
+[video: decision_logs/images/dl04-two-surfaces-side-by-side.mp4 — Betsy's page and the dev view open side by side, both updating from the same live API in real time as the run completes — the two agent-log entries appear without a page refresh.]
+
+What I'd recommend:
+Do not try to make the demo look better by raising the spending limit so the agent acts on the big order. The safeguard is the demonstration. A procurement agent that escalates a $12,000 order for review is more trustworthy than one that approves it silently. For a stakeholder demo, the right way to show autonomous action is a small, cheap restock — Steel Bolts M8 at $0.18 a unit, 500 units, $90 — well under the limit, where the agent places the order and the PO appears in the environment in real time. That is the moment to show. The high-value escalation is the safety story, not a failure to fix.
+
+GAP found:
+The approval queue has nowhere to go yet. The approvals endpoint is described in the API control-layer design but does not exist. Jenny cannot approve the $12k PO from her page — there is no queue and no approve button wired to a real endpoint. That is what DL-05 has to close.
+
+
+6. Does this hold up
+
+- Live data, no manual refresh: yes — Betsy's page polls every five seconds and the dev view every three. Running a scenario and watching both tabs update without touching the page works as expected.
+- Model switch justified by behaviour: partly — Llama 3.1 8B is in and the pipeline ran clean in 28 seconds with no fallbacks. But I have not run a controlled side-by-side of Mistral versus Llama on the same prompt, so the switch is justified by reputation and size class rather than a measured test. Worth running both on the evaluate node to get real numbers.
+- Observable change end to end: yes — ran the stockout scenario and saw two log entries appear in the dev view without refreshing, while the narrative on Betsy's page updated to reflect the detected conditions and the safeguard triggered correctly.
+
+What surprised me:
+How quickly the system started to feel alive. The moment a log entry appears in the browser while the pipeline is still printing to the terminal is the system actually working, not a mockup — worth capturing for the portfolio because it shows the real live integration.
+
+
+7. What this unlocks
+
+Next LO stage: Managing (DL-05 — build the approval queue backend, wire the approve and decline buttons to real endpoints, and add persistence so decisions survive restarts)
+
+What I can now do:
+Trigger any of the four scenarios from the browser, watch the agent run in the terminal and see decisions appear on Betsy's page at the same time, and use both surfaces — @betsy for Jenny, @index for development — against the same live data.
+
+Ongoing monitoring:
+Every pipeline run logs to the agent log. The agent-log tab in the dev view is the health check: if runs are happening and entries are appearing, the integration is alive. The confidence score in each entry is the quality signal — if it sits consistently below 0.6, something in the evaluate or decide nodes is underperforming and the prompt may need adjusting.
+
+How I'll know this worked:
+Run the stockout scenario, watch the agent-log entry appear in @index without refreshing, then open @betsy and see the narrative mention the stockout. If all three happen in one uninterrupted flow, the implementation is working.
+
+
+Files: @betsy, @index, ¹@main, @llm, @decide
+Diagrams: @gap-to-be, @gap-scenario-stockout, @decision-lifecycle
+Source: @bpm_analysis, @api-control-layer
+LO stages: Realizing, Managing

@@ -1,0 +1,33 @@
+---
+title: Betsy — Lifecycle of one procurement decision
+---
+stateDiagram-v2
+    direction TB
+
+    [*] --> Detected: pipeline run finds a condition
+
+    Detected --> Evaluated: rank suppliers (evaluate node)
+    Evaluated --> Decided: classify the decision (decide node)
+
+    state Decided <<choice>>
+    Decided --> AutoApproved: PO total < $5,000 and no anomaly
+    Decided --> PendingHumanReview: duplicate invoice / price spike / escalate / PO total >= $5,000
+
+    note right of Decided
+        The $5,000 limit (MAX_AUTO_USD) is a hard rule
+        in the decide node. The model cannot override it.
+    end note
+
+    AutoApproved --> POCreated: act node creates the PO (status: created)
+
+    PendingHumanReview --> POCreated: Jenny approves a generate_po (status: approved)
+    PendingHumanReview --> Resolved: Jenny approves a flag (logged, no PO)
+    PendingHumanReview --> Rejected: Jenny declines
+
+    POCreated --> InTransit: status -> in_transit
+    InTransit --> Delivered: status -> delivered
+    Delivered --> ScoreUpdated: EMA updates the supplier's reliability score
+
+    Rejected --> [*]
+    Resolved --> [*]
+    ScoreUpdated --> [*]

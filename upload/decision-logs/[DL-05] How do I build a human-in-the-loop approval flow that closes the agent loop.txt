@@ -1,0 +1,106 @@
+DL-05 — Closing the Loop: HITL Approval Queue End to End
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+DL-04 closed with a working run trigger and a confirmed financial safeguard. The $11,937 stockout PO was correctly blocked and surfaced as pending human review. But pending where? The decision existed only as a line printed to the terminal. @betsy already had the approval card fully built — confidence dots, a reasoning block, approve and decline buttons — but clicking either button hit an endpoint that did not exist. The human-in-the-loop design from DL-03 was complete on paper and in pixels. Nothing made it real. That is the gap this log closes.
+
+
+1. Research question
+
+How do I turn Betsy's escalations into real, actionable decisions for Jenny — not just a flag in a log?
+
+
+2. Current LO stage
+
+[ ] Analyzing
+[ ] Advising
+[ ] Designing
+[x] Realizing — built the approval queue backend and wired it to the pipeline
+[x] Managing — ran 11 test cases, found a bug, fixed it, and confirmed the full loop
+
+
+3. What makes a good decision here
+
+Three things have to be true. A decision the pipeline queues has to appear as a card on Jenny's page without her doing anything. Clicking "Yes, go ahead" has to produce a real purchase order in the procurement environment, visible in the dev view immediately. And every approval and rejection has to be recorded, so the audit trail stays complete.
+
+
+4. What I decided
+
+Build the approvals API as a standalone router with three endpoints — list pending, approve, reject — have the act node queue every human-review decision to it, and execute the deferred PO creation inside the approve handler directly against state — the step that finally closes the decision lifecycle end to end (@decision-lifecycle).
+
+
+5. Why this decision
+
+Method: Lab
+
+The real question was where to put the execution logic when a human approves. There were two options: re-run the pipeline from the saved decision, or store the finished PO at queue time and execute it on approval. Re-running the pipeline would mean another model call and another thirty-second wait just to place an order the agent had already decided on. Storing the payload at queue time is simpler and more predictable — the PO is pre-built, and the approve endpoint only has to pull the trigger.
+
+This is the same human checkpoint the before-and-after analysis puts in the TO-BE process: a one-click approve or reject, about five minutes per escalation, with the reasoning attached (@bpm_analysis). The pipeline-approval diagram shows the shape of it — the agent drops a ready-to-go order into the queue, the run finishes, and Jenny acts on it later from her screen.
+
+[IMAGE: diagrams/pipeline-approval.png — The human checkpoint: the agent parks a ready-to-go purchase order in the approvals queue, the run finishes, and Jenny approves or rejects it later from her page.]
+
+The act node builds the complete PO payload the moment a decision is made — supplier, SKU, quantity, unit price, reasoning — and passes the whole thing to the approval queue. Nothing is recomputed later. The approve endpoint in @approvals picks that payload up, creates the PO directly in state, and logs the human decision (@act).
+
+[IMAGE: diagrams/decision-lifecycle.png — One decision from start to finish: detected, evaluated, decided, then either auto-approved or held for Jenny's OK, and on through the order being placed, delivered, and the supplier's score updated. The $5,000 limit is the hard gate between the two paths.]
+
+@betsy needed no changes at all. It was already calling the list, approve, and reject endpoints — the front end had been waiting for the back end the whole time.
+
+[IMAGE: decision_logs/images/dl05-approval-cards.png — The "Needs your OK" section on Betsy's page: two pending items, a flagged duplicate invoice for SKU-004 and a generate-PO for SKU-003 at €11,325, each with confidence dots, reasoning, and Approve and Decline buttons.]
+
+The Lab phase was running 11 test cases against the live server: an empty queue at the start, inject a scenario, trigger the pipeline, check the queue populates, reject one item, approve the other, confirm the queue empties, confirm the PO was created, confirm both decisions appear in the agent log, then guard cases for resolving something twice and for an unknown id. The key results:
+
+  T1   list approvals before a run            empty list                          pass
+  T3   list approvals after a run             2 pending items                     pass
+  T5   approve the generate_po item           returns a new PO id                 pass
+  T6   list approvals after both resolved     empty list                          pass
+  T7   PO present in purchase orders          requested_by betsy-human-approved   pass
+  T9   re-approve an already-resolved item    rejected with 400                   pass
+  T10  approve an unknown id                  rejected with 404                   pass
+
+What surprised me:
+The test showed the queue was empty after a pipeline run even though the queuing code was correct. I traced it to the reset() function in @state — one line was wiping the approvals at the end of every pipeline run, added by accident when wiring up the reset flow. Approvals are not mock data that resets between scenarios; they are user-facing decisions that live until Jenny acts on them. Removing that single line fixed it.
+
+[IMAGE: decision_logs/images/dl05-decision-log-after.png — The decision-log section on Betsy's page after acting: an "approved" entry for SKU-003 and a "declined" entry for SKU-004, each with a timestamp.]
+
+What I'd recommend:
+Store the full decision at queue time, not a reference that has to be recomputed. If you defer execution until approval and then recompute, you introduce a second model call, the risk of state drift (prices may have changed in between), and complexity you do not need. The pattern — decide early, store the payload, execute on approval — is how most approval systems work, for exactly this reason.
+
+GAP found:
+Approvals live in memory. A server restart wipes the whole queue. If Jenny has a pending $11k PO and the server goes down, it is gone — she never sees it again. That is what DL-06 has to close.
+
+
+6. Does this hold up
+
+- Cards appear without manual action: yes — Betsy's page polls every five seconds, and a new approval item shows up within one poll cycle of a pipeline run.
+- Approve creates a real PO: yes — a PO was created with requested_by set to betsy-human-approved, visible in the dev view's orders tab in real time.
+- Full audit trail: yes — every approval and rejection logs to the agent log with the decision id and the action, and the decision-log section on Betsy's page shows them in plain language.
+
+Known limits:
+Pending approvals have no expiry. If a stockout approval sits for three days, the situation has probably changed — prices may have moved, the supplier may have gone out of stock — and there is nothing to surface "this approval is stale." The act node does not store a created-at value to compare against current data. Worth adding a staleness warning in a later pass.
+
+The queue call from the act node is a synchronous HTTP call back to the same server. It works because the server handles concurrent requests, but it means the pipeline depends on the server being up and reachable. If the server is down and someone triggers the pipeline straight from the terminal, the approval fails quietly and the decision is lost — @api_client swallows the error. That is fine for now but worth hardening when persistence comes in.
+
+What I assumed:
+Jenny acts on approvals in the same session. That assumption breaks the moment she closes her laptop — which is exactly what DL-06 addresses.
+
+
+7. What this unlocks
+
+Next LO stage: Managing — ongoing monitoring of the approval queue, and decisions surviving restarts
+
+What I can now do:
+Run any scenario from @betsy, watch approval cards appear, approve or decline them, and see the result in the procurement environment in real time. The full loop — detect, decide, escalate, human approves, PO created — works end to end without touching a terminal, and every decision and every human action is logged.
+
+Ongoing monitoring:
+The agent log is the health check. After a run, look for the approved or declined entries in the decision-log section of @betsy. If a run produces human-review actions but no approval items appear, the queue call is failing quietly — check that the server is up and reachable from the pipeline thread.
+
+How I'll know this worked:
+Run the stockout scenario, see the approval card appear on @betsy within five seconds, click "Yes, go ahead", and watch the approved entry appear in the decision log and the PO appear in the dev view's orders tab — one uninterrupted flow. That is the moment the loop closes.
+
+
+Files: @approvals, @act, @api_client, @state
+Diagrams: @pipeline-approval, @decision-lifecycle
+Source: @bpm_analysis, @test-report-dl05
+LO stages: Realizing, Managing

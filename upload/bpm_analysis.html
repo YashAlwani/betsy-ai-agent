@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Betsy: Business Process Impact Analysis</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f0f2f5;color:#1a1a2e;line-height:1.5}
+.page-header{background:linear-gradient(135deg,#0d1b2a 0%,#1b2838 60%,#0d2137 100%);color:white;padding:44px 48px;border-bottom:4px solid #3a9bd5}
+.header-eyebrow{font-size:11px;font-weight:600;letter-spacing:2px;color:#7ec8e3;text-transform:uppercase;margin-bottom:10px}
+.header-title{font-size:28px;font-weight:800;margin-bottom:8px;line-height:1.2}
+.header-sub{font-size:14px;color:rgba(255,255,255,.7);max-width:700px;margin-bottom:20px;line-height:1.6}
+.header-meta{display:flex;flex-wrap:wrap;gap:20px;font-size:12px;color:rgba(255,255,255,.5)}
+.header-meta strong{color:rgba(255,255,255,.8)}
+.page-body{max-width:1400px;margin:0 auto;padding:40px 32px}
+.section{margin-bottom:48px}
+.section-title{font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:4px;padding-bottom:10px;border-bottom:2px solid #e0e0e0;display:flex;align-items:center;gap:10px}
+.badge{font-size:11px;font-weight:700;padding:3px 11px;border-radius:20px;vertical-align:middle}
+.badge-before{background:#fee2e2;color:#b91c1c}
+.badge-after{background:#dcfce7;color:#166534}
+.section-desc{font-size:13px;color:#555;margin-bottom:20px;line-height:1.65}
+/* EXEC CARD */
+.exec-card{background:linear-gradient(135deg,#eff6ff,#f0fdf4);border:1px solid #bfdbfe;border-radius:12px;padding:24px 28px;margin-bottom:40px}
+.exec-card h3{font-size:15px;font-weight:700;color:#1e40af;margin-bottom:10px}
+.exec-card p{font-size:13px;color:#374151;line-height:1.7}
+.exec-card ul{margin:10px 0 0 18px;font-size:13px;color:#374151;line-height:1.9}
+/* METRICS */
+.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.metric-card{background:white;border-radius:12px;padding:20px;box-shadow:0 1px 5px rgba(0,0,0,.08);border-top:4px solid}
+.mc-red{border-top-color:#ef4444}
+.mc-green{border-top-color:#22c55e}
+.mc-blue{border-top-color:#3b82f6}
+.mc-purple{border-top-color:#a855f7}
+.metric-label{font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.metric-before{font-size:12px;color:#ef4444;margin-bottom:4px}
+.metric-big{font-size:26px;font-weight:800;color:#1a1a2e;line-height:1}
+.metric-after{font-size:12px;color:#22c55e;margin-top:4px}
+.metric-delta{margin-top:8px}
+.delta-pill{display:inline-block;background:#dcfce7;color:#166534;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+/* LEGEND */
+.legend{display:flex;flex-wrap:wrap;gap:14px;background:white;padding:14px 20px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:20px}
+.legend-item{display:flex;align-items:center;gap:7px;font-size:11px;color:#555}
+.legend-swatch{width:26px;height:14px;border-radius:3px;border:2px solid;flex-shrink:0}
+/* BPM WRAPPER */
+.bpm-wrapper{background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);overflow:hidden;margin-bottom:20px}
+.bpm-bar{background:#1a1a2e;color:white;padding:14px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.bpm-bar h3{font-size:14px;font-weight:700}
+.bpm-bar p{font-size:11px;color:rgba(255,255,255,.55);margin-top:3px}
+.bpm-bar .bpm-stats{font-size:11px;color:rgba(255,255,255,.45);white-space:nowrap;padding-top:2px}
+.bpm-scroll{overflow-x:auto}
+/* SWIMLANE TABLE */
+.sw-table{border-collapse:collapse;min-width:1100px;width:100%}
+.sw-table td{vertical-align:middle}
+/* PHASE HEADER ROW */
+.ph-row td{background:#f8f9fa;font-size:9px;font-weight:700;color:#9ca3af;text-align:center;padding:5px 3px;border-bottom:1px solid #e5e7eb;border-right:1px dashed #e5e7eb;letter-spacing:.5px;text-transform:uppercase}
+.ph-row .td-lbl-h{background:#eef0f2;border-right:3px solid #d1d5db;font-size:9px;color:#9ca3af;text-align:center}
+/* LANE LABEL */
+.td-lbl{width:128px;min-width:128px;max-width:128px;padding:10px 10px;vertical-align:middle;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;line-height:1.35;border-right:3px solid}
+.td-lbl .sub{font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;display:block;margin-top:2px}
+.td-lbl .role{font-size:9px;font-weight:700;display:block;margin-top:5px;padding:2px 6px;border-radius:8px;text-align:center}
+.lbl-jenny{background:#fffbeb;border-right-color:#fcd34d;color:#92400e}
+.lbl-jenny .role{background:#fef3c7;color:#92400e}
+.lbl-betsy{background:#eff6ff;border-right-color:#93c5fd;color:#1e40af}
+.lbl-betsy .role{background:#dbeafe;color:#1e40af}
+.lbl-sup{background:#f0fdf4;border-right-color:#86efac;color:#14532d}
+.lbl-fin{background:#fdf4ff;border-right-color:#d8b4fe;color:#581c87}
+/* STEP CELLS */
+.td-step{padding:8px 5px;width:115px;min-width:100px;border-right:1px dashed #e5e7eb;border-bottom:2px solid #e5e7eb}
+.td-step:last-child{border-right:none}
+.td-empty{width:115px;min-width:100px;border-right:1px dashed #e5e7eb;border-bottom:2px solid #e5e7eb;background:repeating-linear-gradient(-45deg,transparent,transparent 6px,rgba(0,0,0,.02) 6px,rgba(0,0,0,.02) 12px)}
+.td-empty.clear{background:#fafafa}
+.lane-last td{border-bottom:none}
+/* STEP BOXES */
+.sb{border-radius:7px;padding:7px 6px;text-align:center;font-size:9.5px;font-weight:600;line-height:1.3;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.sb-start{background:#bbf7d0;border:2.5px solid #22c55e;border-radius:50%;width:54px;height:54px;margin:auto;font-size:8.5px;font-weight:700;color:#14532d;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.sb-end{background:#fca5a5;border:3px solid #ef4444;border-radius:50%;width:54px;height:54px;margin:auto;font-size:8.5px;font-weight:700;color:#7f1d1d;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.sb-end-green{background:#bbf7d0;border:3px solid #16a34a;border-radius:50%;width:54px;height:54px;margin:auto;font-size:8.5px;font-weight:700;color:#14532d;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.sb-manual{background:#fef9c3;border:2px solid #facc15;color:#713f12}
+.sb-delay{background:#fee2e2;border:2px solid #f87171;color:#7f1d1d}
+.sb-auto{background:#dbeafe;border:2px solid #60a5fa;color:#1e3a8a}
+.sb-auto-key{background:#c7d2fe;border:2px solid #818cf8;color:#1e1b4b}
+.sb-gateway{background:#fff7ed;border:2px solid #fb923c;color:#7c2d12;min-height:64px}
+.sb-ext{background:#f0fdf4;border:2px solid #86efac;color:#14532d}
+.sb-fin{background:#fdf4ff;border:2px solid #c084fc;color:#581c87}
+.sb-alert{background:#fff7ed;border:2px solid #fb923c;color:#7c2d12}
+.sb-insight{background:#eff6ff;border:2px solid #93c5fd;color:#1e40af}
+.sb-free{background:#f0fdf4;border:1.5px dashed #86efac;color:#166534;font-style:italic;font-size:9px;font-weight:500;border-radius:7px;padding:10px 8px;min-height:58px;display:flex;align-items:center;justify-content:center;text-align:center}
+.stag{font-size:7.5px;font-weight:700;padding:1px 5px;border-radius:7px;letter-spacing:.4px;margin-bottom:2px}
+.stag-m{background:#fcd34d;color:#78350f}
+.stag-a{background:#93c5fd;color:#1e3a8a}
+.stag-p{background:#f87171;color:white}
+.stag-g{background:#86efac;color:#14532d}
+.stag-k{background:#818cf8;color:white}
+.stag-h{background:#fed7aa;color:#7c2d12}
+.cn{font-size:8px;color:#6b7280;font-style:italic;margin-top:2px}
+.gw-sym{font-size:16px;line-height:1}
+/* PAIN/GAIN BOXES */
+.callout{border-radius:10px;padding:16px 20px;margin-top:16px}
+.callout-pain{background:#fee2e2;border:1px solid #fca5a5}
+.callout-gain{background:#dcfce7;border:1px solid #86efac}
+.callout-title{font-size:12px;font-weight:700;margin-bottom:10px}
+.callout-pain .callout-title{color:#7f1d1d}
+.callout-gain .callout-title{color:#14532d}
+.callout-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.callout-item{font-size:11px;line-height:1.55}
+.callout-pain .callout-item{color:#7f1d1d}
+.callout-gain .callout-item{color:#14532d}
+/* COMPARISON TABLE */
+.cmp-table{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.cmp-table th{padding:12px 16px;text-align:left;font-size:12px;font-weight:600;letter-spacing:.5px}
+.th-process{background:#1a1a2e;color:white;width:20%}
+.th-before{background:#7f1d1d;color:white;width:27%}
+.th-after{background:#14532d;color:white;width:27%}
+.th-impact{background:#1e3a8a;color:white;width:26%}
+.cmp-table td{padding:11px 16px;font-size:12px;border-bottom:1px solid #f3f4f6;vertical-align:top;line-height:1.55}
+.cmp-table tr:last-child td{border-bottom:none}
+.cmp-table tr:nth-child(even) td{background:#f9fafb}
+.pname{font-weight:700;color:#1a1a2e;font-size:12px}
+.bc{color:#7f1d1d}
+.ac{color:#14532d}
+.ic{color:#1e3a8a;font-weight:600}
+/* SCENARIOS */
+.sc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.sc-card{background:white;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);overflow:hidden}
+.sc-hdr{padding:14px 18px}
+.sc-hdr.red{background:#fee2e2;border-bottom:3px solid #ef4444}
+.sc-hdr.amber{background:#fff7ed;border-bottom:3px solid #f97316}
+.sc-hdr.blue{background:#eff6ff;border-bottom:3px solid #3b82f6}
+.sc-hdr h4{font-size:13px;font-weight:700;color:#1a1a2e}
+.sc-hdr p{font-size:11px;color:#555;margin-top:3px}
+.sc-body{padding:16px 18px}
+.sc-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#9ca3af;margin-bottom:8px;margin-top:14px}
+.sc-lbl:first-child{margin-top:0}
+.fl{display:flex;flex-direction:column;gap:7px}
+.fl-row{display:flex;gap:10px;align-items:flex-start}
+.fl-icon{width:22px;height:22px;border-radius:50%;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;color:white}
+.fi-m{background:#ef4444}
+.fi-a{background:#3b82f6}
+.fi-h{background:#f97316}
+.fi-d{background:#22c55e}
+.fl-text{font-size:11px;line-height:1.45;color:#374151}
+.fl-text strong{color:#1a1a2e;display:block;margin-bottom:2px}
+.tag-time{display:inline-block;font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;margin-top:3px}
+.tt-b{background:#fee2e2;color:#b91c1c}
+.tt-a{background:#dcfce7;color:#166534}
+.tt-d{background:#eff6ff;color:#1e40af}
+/* TIME ANALYSIS */
+.time-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.time-card{background:white;border-radius:12px;padding:22px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.time-card h4{font-size:14px;font-weight:700;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #f3f4f6}
+.h4-red{color:#ef4444}
+.h4-green{color:#22c55e}
+.t-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f9fafb;font-size:12px}
+.t-row:last-child{border-bottom:none}
+.t-task{color:#374151}
+.t-val-r{font-weight:700;font-size:13px;color:#ef4444}
+.t-val-g{font-weight:700;font-size:13px;color:#22c55e}
+.t-val-n{font-weight:400;font-size:12px;color:#9ca3af}
+.t-total{background:#f8f9fa;font-weight:700;font-size:13px;margin-top:10px;border-radius:7px;padding:9px 13px;display:flex;justify-content:space-between}
+.t-total-r{color:#ef4444}
+.t-total-g{color:#22c55e}
+.net-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:15px 20px;margin-top:16px;font-size:13px;color:#1e40af;line-height:1.6}
+/* FOOTER */
+.page-footer{background:#1a1a2e;color:rgba(255,255,255,.4);text-align:center;padding:18px;font-size:11px;margin-top:48px}
+@media(max-width:900px){.metrics-grid{grid-template-columns:repeat(2,1fr)}.sc-grid{grid-template-columns:1fr}.time-grid{grid-template-columns:1fr}.callout-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="page-header">
+  <div class="header-eyebrow">Business Process Impact Analysis — Agentic AI</div>
+  <h1 class="header-title">Betsy: Autonomous Procurement Agent</h1>
+  <p class="header-sub">Before &amp; After Business Process Model showing the operational impact of an Agentic AI tool on a small manufacturing procurement workflow. Grounded in the Betsy mock environment (12 SKUs, 6 suppliers, 4 live scenarios).</p>
+  <div class="header-meta">
+    <span><strong>Project:</strong> Betsy — Autonomous Procurement POC</span>
+    <span><strong>Primary Stakeholder:</strong> Jenny (Operations Manager)</span>
+    <span><strong>Date:</strong> 28 May 2026</span>
+    <span><strong>Phase:</strong> Phase 2 — Core Autonomous Loop</span>
+  </div>
+</header>
+
+<div class="page-body">
+
+<!-- EXECUTIVE SUMMARY -->
+<div class="exec-card">
+  <h3>Executive Summary</h3>
+  <p>Operations Manager Jenny currently spends <strong>30–35 hours per week</strong> on procurement firefighting — manually checking inventory, chasing supplier quotes by email, drafting purchase orders, following up on deliveries, and reconciling invoices by hand. This reactive, sequential workflow leaves no time for strategic work and creates persistent risk of production-line shutdowns and duplicate payments.</p>
+  <ul>
+    <li>The Betsy agent <strong>automates ~80% of procurement touchpoints</strong>, running the detect → source → order → reconcile cycle continuously and without human initiation.</li>
+    <li>Human review is preserved and meaningful — scoped to high-value decisions, price anomalies, and flagged exceptions — reducing Jenny's procurement load to <strong>2–4 hours per week</strong>.</li>
+    <li>Three live mock scenarios demonstrate this concretely: Betsy detected a <strong>1.5-day stockout window</strong> for SKU-003 Steel Rods and dispatched a PO to QuickShip Express before any human noticed; identified a <strong>$1,470 duplicate invoice</strong> (INV-2024-099 matching INV-2024-089) in under 100ms; and correctly escalated a <strong>50% price spike</strong> on Steel Rods rather than auto-purchasing.</li>
+  </ul>
+</div>
+
+<!-- KEY METRICS -->
+<div class="section">
+  <div class="section-title">Key Impact Metrics</div>
+  <div class="metrics-grid">
+    <div class="metric-card mc-red">
+      <div class="metric-label">Weekly Procurement Time (Jenny)</div>
+      <div class="metric-before">Before: 30–35 hrs / week</div>
+      <div class="metric-big">2–4 hrs</div>
+      <div class="metric-after">After: Exception oversight only</div>
+      <div class="metric-delta"><span class="delta-pill">~87% reduction</span></div>
+    </div>
+    <div class="metric-card mc-green">
+      <div class="metric-label">Task Automation Rate</div>
+      <div class="metric-before">Before: 0% automated</div>
+      <div class="metric-big">~80%</div>
+      <div class="metric-after">After: Handled autonomously</div>
+      <div class="metric-delta"><span class="delta-pill">Project plan target</span></div>
+    </div>
+    <div class="metric-card mc-blue">
+      <div class="metric-label">Supplier Sourcing Latency</div>
+      <div class="metric-before">Before: 24–48 hrs (email)</div>
+      <div class="metric-big">&lt;5 sec</div>
+      <div class="metric-after">After: All 6 suppliers, instant</div>
+      <div class="metric-delta"><span class="delta-pill">&gt;17,000× faster</span></div>
+    </div>
+    <div class="metric-card mc-purple">
+      <div class="metric-label">Invoice Duplicate Detection</div>
+      <div class="metric-before">Before: Manual, unreliable</div>
+      <div class="metric-big">100%</div>
+      <div class="metric-after">After: Every invoice scanned</div>
+      <div class="metric-delta"><span class="delta-pill">Caught: $1,470 dup. invoice</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#fef9c3;border-color:#facc15;"></div>Manual Task (human effort)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#dbeafe;border-color:#60a5fa;"></div>Automated Task (Betsy)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#c7d2fe;border-color:#818cf8;"></div>Key Automated Step (high impact)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fee2e2;border-color:#f87171;"></div>Delay / Bottleneck / Risk</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f0fdf4;border-color:#86efac;"></div>External Party (Supplier)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fff7ed;border-color:#fb923c;"></div>Decision Gateway</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fdf4ff;border-color:#c084fc;"></div>Finance Activity</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#bbf7d0;border-color:#22c55e;border-radius:50%;"></div>Start Event</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fca5a5;border-color:#ef4444;border-radius:50%;"></div>End Event</div>
+</div>
+
+<!-- =========================================================
+     AS-IS BPM
+     ========================================================= -->
+<div class="section">
+  <div class="section-title">AS-IS Process Model <span class="badge badge-before">BEFORE BETSY</span></div>
+  <div class="section-desc">Current-state manual procurement workflow. Jenny is the primary actor across all phases — from inventory monitoring through invoice reconciliation. Key pain points are highlighted. Read left-to-right; vertical cross-lane references (↓ / ↑) indicate handoffs between parties.</div>
+
+  <div class="bpm-wrapper">
+    <div class="bpm-bar">
+      <div>
+        <h3>Manual Procurement Process — AS-IS</h3>
+        <p>Operations-Manager-led, reactive, sequential workflow spanning 3 parties</p>
+      </div>
+      <div class="bpm-stats">30–35 hrs / week &nbsp;|&nbsp; 2–3 day cycle times &nbsp;|&nbsp; 0% automated</div>
+    </div>
+    <div class="bpm-scroll">
+      <table class="sw-table">
+        <!-- Phase header -->
+        <tr class="ph-row">
+          <td class="td-lbl-h">LANE</td>
+          <td>P1</td><td>P2</td><td>P3</td><td>P4</td><td>P5</td><td>P6</td>
+          <td>P7</td><td>P8</td><td>P9</td><td>P10</td><td>P11</td><td>P12</td><td>P13</td>
+        </tr>
+        <!-- JENNY LANE -->
+        <tr>
+          <td class="td-lbl lbl-jenny">Ops Manager<span class="sub">Jenny</span><span class="role">PRIMARY ACTOR</span></td>
+          <!-- P1 START -->
+          <td class="td-step" style="text-align:center;"><div class="sb-start">START<br>Weekly</div></td>
+          <!-- P2 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-m">MANUAL</span>Check ERP &amp; Inventory Spreadsheets</div></td>
+          <!-- P3 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-p">RISK</span>Manually Identify Low-Stock Items<span class="cn">Reactive — spotted too late</span></div></td>
+          <!-- P4 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-m">MANUAL</span>Email 3+ Suppliers Requesting Quotes<span class="cn">↓ sends to Suppliers</span></div></td>
+          <!-- P5 -->
+          <td class="td-step"><div class="sb sb-delay"><span class="stag stag-p">BOTTLENECK</span>Wait 1–2 Business Days for Replies<span class="cn">↑ quote arrives from Suppliers</span></div></td>
+          <!-- P6 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-m">MANUAL</span>Compare Quotes Manually in Spreadsheet</div></td>
+          <!-- P7 -->
+          <td class="td-step"><div class="sb sb-gateway"><span class="gw-sym">&#9830;</span>Price &amp; Availability OK?</div></td>
+          <!-- P8 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-m">MANUAL</span>Draft Purchase Order in ERP System</div></td>
+          <!-- P9 -->
+          <td class="td-step"><div class="sb sb-delay"><span class="stag stag-p">DELAY</span>Await Manager Email Sign-Off<span class="cn">1–2 day email chain</span></div></td>
+          <!-- P10 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-m">MANUAL</span>Email PO to Supplier<span class="cn">↓ sends to Suppliers</span></div></td>
+          <!-- P11 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-p">PAIN</span>Chase Delivery via Calls &amp; Emails<span class="cn">5–8 hrs/week</span></div></td>
+          <!-- P12 -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-m">MANUAL</span>Confirm Receipt &amp; Update Inventory</div></td>
+          <!-- P13 END -->
+          <td class="td-step" style="text-align:center;"><div class="sb-end">END<br>Jenny</div></td>
+        </tr>
+        <!-- SUPPLIERS LANE -->
+        <tr>
+          <td class="td-lbl lbl-sup">Suppliers<span class="sub">External Party</span><span class="sub" style="color:#14532d;font-weight:600;margin-top:3px;display:block;">6 in mock env.</span></td>
+          <!-- P1-P3 empty -->
+          <td class="td-empty clear" colspan="3"></td>
+          <!-- P4 -->
+          <td class="td-step"><div class="sb sb-ext"><span class="stag stag-g">EXT</span>Receive Quote Request<span class="cn">↑ from Jenny P4</span></div></td>
+          <!-- P5 -->
+          <td class="td-step"><div class="sb sb-ext"><span class="stag stag-g">EXT</span>Prepare &amp; Send Quote + Lead Time<span class="cn">↓ to Jenny P5</span></div></td>
+          <!-- P6-P9 empty -->
+          <td class="td-empty clear" colspan="4"></td>
+          <!-- P10 -->
+          <td class="td-step"><div class="sb sb-ext"><span class="stag stag-g">EXT</span>Receive PO Confirmation<span class="cn">↑ from Jenny P10</span></div></td>
+          <!-- P11 -->
+          <td class="td-step"><div class="sb sb-ext"><span class="stag stag-g">EXT</span>Pick, Pack &amp; Ship; Submit Invoice<span class="cn">↓ invoice to Finance P12</span></div></td>
+          <!-- P12-P13 empty -->
+          <td class="td-empty clear" colspan="2"></td>
+        </tr>
+        <!-- FINANCE LANE -->
+        <tr class="lane-last">
+          <td class="td-lbl lbl-fin">Finance Team<span class="sub">Invoice Processing</span></td>
+          <!-- P1-P11 empty -->
+          <td class="td-empty clear" colspan="11"></td>
+          <!-- P12 -->
+          <td class="td-step"><div class="sb sb-delay"><span class="stag stag-p">ERROR RISK</span>Receive Invoice; Manual PO Matching + Duplicate Check<span class="cn">No automated detection</span></div></td>
+          <!-- P13 END -->
+          <td class="td-step" style="text-align:center;"><div class="sb-end" style="font-size:8px;">END<br>Pay / Flag</div></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pain summary -->
+  <div class="callout callout-pain">
+    <div class="callout-title">Key AS-IS Pain Points</div>
+    <div class="callout-grid">
+      <div class="callout-item"><strong>P3 — Reactive Detection</strong><br>Stockouts identified only during Jenny's periodic manual checks. SKU-003 Steel Rods reached 45 units (1.5 days of production cover) before being noticed. Reorder point: 200 units.</div>
+      <div class="callout-item"><strong>P5 — 48-Hour Sourcing Bottleneck</strong><br>Email-based RFQ with 3–4 suppliers takes 1–2 business days. Not all 6 suppliers are contacted every cycle. QuickShip Express (1-day lead — best for urgent orders) often missed.</div>
+      <div class="callout-item"><strong>P9 — Approval Chain Latency</strong><br>Manager sign-off via email adds 1–2 days. Weekends, holidays, and meetings extend this further — compounding the stockout risk window for critical SKUs.</div>
+      <div class="callout-item"><strong>P12 — Invoice Errors Undetected</strong><br>Manual duplicate detection fails at scale. INV-2024-089 and INV-2024-091 are identical $1,470 invoices from MidRange Supply (SUP-006) for 10× Circuit Board Type A — both in the system with no flag.</div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     TO-BE BPM
+     ========================================================= -->
+<div class="section">
+  <div class="section-title">TO-BE Process Model <span class="badge badge-after">AFTER BETSY</span></div>
+  <div class="section-desc">Future-state agentic AI-augmented procurement workflow. Betsy autonomously handles the full detect-source-order-reconcile loop. Jenny is reserved for high-value decisions, anomalies, and strategic oversight. The shorter diagram reflects fewer steps — a visual representation of the efficiency gain.</div>
+
+  <div class="bpm-wrapper">
+    <div class="bpm-bar">
+      <div>
+        <h3>Agentic AI Procurement Process — TO-BE</h3>
+        <p>Betsy-led, proactive, parallel workflow — human at exception points only</p>
+      </div>
+      <div class="bpm-stats">2–4 hrs / week &nbsp;|&nbsp; &lt;5 sec sourcing &nbsp;|&nbsp; ~80% automated</div>
+    </div>
+    <div class="bpm-scroll">
+      <table class="sw-table">
+        <!-- Phase header -->
+        <tr class="ph-row">
+          <td class="td-lbl-h">LANE</td>
+          <td>P1</td><td>P2</td><td>P3</td><td>P4</td><td>P5</td>
+          <td>P6</td><td>P7</td><td>P8</td><td>P9</td><td>P10</td><td>P11</td>
+        </tr>
+        <!-- BETSY LANE -->
+        <tr>
+          <td class="td-lbl lbl-betsy">Betsy Agent<span class="sub">Autonomous AI</span><span class="role">PRIMARY ACTOR</span></td>
+          <!-- P1 START -->
+          <td class="td-step" style="text-align:center;"><div class="sb-start">START<br>24 / 7</div></td>
+          <!-- P2 -->
+          <td class="td-step"><div class="sb sb-auto"><span class="stag stag-a">AUTO</span>Monitor All 12 SKUs Continuously<span class="cn">real-time vs reorder_point</span></div></td>
+          <!-- P3 KEY -->
+          <td class="td-step"><div class="sb sb-auto-key"><span class="stag stag-k">KEY</span>Detect Stockout Risk — days_remaining Calc.<span class="cn">SKU-003: 1.5 days left ← caught</span></div></td>
+          <!-- P4 -->
+          <td class="td-step"><div class="sb sb-auto"><span class="stag stag-a">AUTO</span>Query All 6 Suppliers Concurrently<span class="cn">&lt;1 sec vs 48 hrs</span></div></td>
+          <!-- P5 -->
+          <td class="td-step"><div class="sb sb-auto"><span class="stag stag-a">AUTO</span>Score Suppliers: Price × Reliability × Lead Time<span class="cn">e.g. QuickShip: 0.92 score, 1-day</span></div></td>
+          <!-- P6 KEY -->
+          <td class="td-step"><div class="sb sb-auto-key"><span class="stag stag-k">KEY</span>Generate PO Recommendation + Full Reasoning<span class="cn">Transparent audit trail</span></div></td>
+          <!-- P7 GATEWAY -->
+          <td class="td-step"><div class="sb sb-gateway"><span class="gw-sym">&#9830;</span>Anomaly or &gt; $5k?<span class="cn">Yes → Jenny; No → auto-send</span></div></td>
+          <!-- P8 -->
+          <td class="td-step"><div class="sb sb-auto"><span class="stag stag-a">AUTO</span>Auto-Send PO to Supplier<span class="cn">↓ sends to Suppliers P8</span></div></td>
+          <!-- P9 -->
+          <td class="td-step"><div class="sb sb-auto"><span class="stag stag-a">AUTO</span>Monitor Delivery + Auto-Match Invoice to PO<span class="cn">zero manual reconciliation</span></div></td>
+          <!-- P10 KEY -->
+          <td class="td-step"><div class="sb sb-auto-key"><span class="stag stag-k">KEY</span>Duplicate Detection + Log Decision + Update Supplier Scores<span class="cn">Caught INV-099 = $1,470 dup.</span></div></td>
+          <!-- P11 END -->
+          <td class="td-step" style="text-align:center;"><div class="sb-end-green">CYCLE<br>DONE</div></td>
+        </tr>
+        <!-- JENNY LANE -->
+        <tr>
+          <td class="td-lbl lbl-jenny">Ops Manager<span class="sub">Jenny</span><span class="role">OVERSIGHT</span></td>
+          <!-- P1-P6 free -->
+          <td class="td-empty clear" colspan="6">
+            <div class="sb-free" style="margin:8px 12px;">Free for strategic supplier development, contract negotiations &amp; operational improvement</div>
+          </td>
+          <!-- P7 ALERT -->
+          <td class="td-step"><div class="sb sb-alert"><span class="stag stag-h">ALERT</span>Receive Notification — Anomalous or High-Value PO<span class="cn">Only when Betsy escalates</span></div></td>
+          <!-- P8 APPROVE -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-h">HUMAN</span>1-Click Approve or Reject with Reason<span class="cn">~5 min per escalation</span></div></td>
+          <!-- P9 free -->
+          <td class="td-empty clear"></td>
+          <!-- P10 REVIEW -->
+          <td class="td-step"><div class="sb sb-manual"><span class="stag stag-h">HUMAN</span>Review Flagged Invoices Only<span class="cn">exceptions, not routine</span></div></td>
+          <!-- P11 DASHBOARD -->
+          <td class="td-step"><div class="sb sb-insight"><span class="stag stag-a">INSIGHT</span>Strategic Dashboard: Supplier Trends &amp; KPIs</div></td>
+        </tr>
+        <!-- SUPPLIERS LANE -->
+        <tr>
+          <td class="td-lbl lbl-sup">Suppliers<span class="sub">External Party</span></td>
+          <!-- P1-P7 empty -->
+          <td class="td-empty clear" colspan="7"></td>
+          <!-- P8 -->
+          <td class="td-step"><div class="sb sb-ext"><span class="stag stag-g">EXT</span>Receive Automated PO<span class="cn">↑ from Betsy P8</span></div></td>
+          <!-- P9 -->
+          <td class="td-step"><div class="sb sb-ext"><span class="stag stag-g">EXT</span>Ship Order + Submit Invoice<span class="cn">↓ auto-captured P9</span></div></td>
+          <!-- P10-P11 empty -->
+          <td class="td-empty clear" colspan="2"></td>
+        </tr>
+        <!-- FINANCE LANE -->
+        <tr class="lane-last">
+          <td class="td-lbl lbl-fin">Finance Team<span class="sub">Invoice Processing</span></td>
+          <!-- P1-P9 empty -->
+          <td class="td-empty clear" colspan="9"></td>
+          <!-- P10 -->
+          <td class="td-step"><div class="sb sb-fin"><span class="stag" style="background:#d8b4fe;color:#581c87;">FIN</span>Auto-Approved Clean Invoices Processed; Exceptions Escalated for Review</div></td>
+          <!-- P11 empty -->
+          <td class="td-empty clear"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Gain summary -->
+  <div class="callout callout-gain">
+    <div class="callout-title">Key TO-BE Process Gains</div>
+    <div class="callout-grid">
+      <div class="callout-item"><strong>P3 — Proactive Detection</strong><br>Betsy calculates days_remaining = current_stock / daily_usage_avg continuously. SKU-003: 45 ÷ 30 = 1.5 days. PO triggered immediately — no waiting until Monday's manual check.</div>
+      <div class="callout-item"><strong>P4–P5 — Instant Parallel Sourcing</strong><br>All 6 suppliers queried simultaneously from the catalog in under 1 second. QuickShip Express (SUP-003, 1-day lead, 0.92 reliability) automatically selected for the urgent SKU-003 stockout.</div>
+      <div class="callout-item"><strong>P7 — Smart Escalation Only</strong><br>Price spike scenario: SKU-003 best quote ($13.60) is 19.3% above historical avg ($11.40). At the 30% threshold, normal orders auto-approve; anomalies route to Jenny with full context and reasoning.</div>
+      <div class="callout-item"><strong>P10 — Zero Duplicate Payments</strong><br>_find_duplicates() scans on every invoice submission. INV-2024-099 matched INV-2024-089: same SUP-006, same $1,470, 29 days apart → HIGH RISK flag raised before any payment is processed.</div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================
+     STEP-BY-STEP COMPARISON TABLE
+     ========================================================= -->
+<div class="section">
+  <div class="section-title">Step-by-Step Process Comparison</div>
+  <table class="cmp-table">
+    <thead>
+      <tr>
+        <th class="th-process">Process Activity</th>
+        <th class="th-before">AS-IS — Manual (Before)</th>
+        <th class="th-after">TO-BE — Agentic AI (After)</th>
+        <th class="th-impact">Impact</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><div class="pname">Inventory Monitoring</div></td>
+        <td class="bc">Jenny manually checks ERP spreadsheet once or twice a week. Stockouts often identified with fewer than 2 days of cover remaining.</td>
+        <td class="ac">Betsy polls /api/inventory continuously. Calculates days_remaining = current_stock ÷ daily_usage_avg for all 12 SKUs. Threshold alert fires instantly.</td>
+        <td class="ic">Reactive weekly → proactive real-time. SKU-003 example: 1.5 days remaining detected immediately vs. noticed Monday morning after the fact.</td>
+      </tr>
+      <tr>
+        <td><div class="pname">Supplier Sourcing</div></td>
+        <td class="bc">Email 3–4 known suppliers. Wait 1–2 business days for replies. Not all 6 suppliers are contacted every cycle. Quotes compared manually in spreadsheet.</td>
+        <td class="ac">Betsy queries all 6 suppliers via /api/suppliers simultaneously. Filters by availability: true and catalog SKU match. Total time: under 1 second.</td>
+        <td class="ic">48-hour sourcing cycle → under 1 second. All 6 suppliers evaluated every time. Best-scoring option selected, not just whoever replies first.</td>
+      </tr>
+      <tr>
+        <td><div class="pname">Supplier Selection</div></td>
+        <td class="bc">Manual comparison based on experience and last known price. Reliability history not systematically tracked or weighted.</td>
+        <td class="ac">Multi-factor scoring across unit_price, lead_days, and reliability_score. For urgency: QuickShip (0.92 score, 1-day lead) beats BulkSupply (0.88, 7-day) despite higher price.</td>
+        <td class="ic">Gut-based → evidence-based. Supplier reliability_score updates after each transaction outcome (learning loop). Decision rationale logged for audit.</td>
+      </tr>
+      <tr>
+        <td><div class="pname">Purchase Order Creation</div></td>
+        <td class="bc">Jenny drafts PO manually in ERP. Sends manager an email for sign-off. Waits 1–2 days. Then manually emails PO to supplier. Entire cycle: 2–3 days.</td>
+        <td class="ac">Betsy POSTs to /api/purchase-orders with full reasoning. Status set to "pending_approval" for anomalies; auto-transitions to "approved" for routine orders. PO dispatched immediately.</td>
+        <td class="ic">2–3 day cycle → minutes for routine orders. Manager approval preserved for high-value/anomaly via push notification. Zero lag on standard reorders.</td>
+      </tr>
+      <tr>
+        <td><div class="pname">Delivery Tracking</div></td>
+        <td class="bc">Jenny calls or emails supplier to check status. Estimated 5–8 hours per week of follow-up. No systematic monitoring; surprises on Monday mornings.</td>
+        <td class="ac">Betsy monitors expected_delivery from PO record. PATCHes /api/purchase-orders/{po_id}/status on confirmation. Proactive late-delivery alert sent to Jenny if window is missed.</td>
+        <td class="ic">5–8 hrs/week chasing → zero manual effort. Proactive alerts replace reactive Monday morning discoveries.</td>
+      </tr>
+      <tr>
+        <td><div class="pname">Invoice Reconciliation</div></td>
+        <td class="bc">Finance manually matches invoice to PO in spreadsheet. Ad hoc duplicate check. INV-2024-089 and INV-2024-091 — both $1,470 from SUP-006 — paid without a flag being raised.</td>
+        <td class="ac">Betsy runs _find_duplicates() on every invoice submission: matches supplier_id, total_amount, and date proximity (&lt;60 days). HIGH RISK if under 30 days apart.</td>
+        <td class="ic">Manual / error-prone → automatic, 100% coverage. INV-2024-099 flagged immediately as duplicate of INV-2024-089 (same $1,470, SUP-006, 29 days — HIGH RISK).</td>
+      </tr>
+      <tr>
+        <td><div class="pname">Price Anomaly Detection</div></td>
+        <td class="bc">No systematic baseline comparison. Jenny may sense "this seems high" but has no formal threshold. Risk of overpaying during supply disruptions under production pressure.</td>
+        <td class="ac">Betsy compares current quote against stored historical_avg_price. If deviation exceeds the 30% spike threshold, escalates to Jenny with all quotes, history, and recommendation rather than auto-ordering.</td>
+        <td class="ic">No guardrail → enforced 30% threshold. Price spike scenario ($13.60 vs $11.40 avg) correctly triggers flag_for_approval action before any PO is issued.</td>
+      </tr>
+      <tr>
+        <td><div class="pname">Decision Audit Trail</div></td>
+        <td class="bc">Ad hoc — email chains and some ERP entries. No structured log of why supplier X was chosen over Y. Finance cannot trace decision rationale for any given PO.</td>
+        <td class="ac">Every decision logged to /api/agent-log: timestamp, SKU, candidate suppliers with scores, chosen supplier, reasoning, and eventual outcome. Human-readable and queryable.</td>
+        <td class="ic">No systematic record → full transparency. Satisfies finance audit requirements. Enables bias review. Every PO traceable to its exact scoring inputs.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- =========================================================
+     SCENARIO WALKTHROUGHS
+     ========================================================= -->
+<div class="section">
+  <div class="section-title">Scenario-Level Walkthroughs — Mock Environment</div>
+  <div class="section-desc">Three scenarios from the live mock environment showing the concrete before/after difference in how each situation is handled. All data drawn from scenarios/ and mock_data/ in the Betsy repository.</div>
+  <div class="sc-grid">
+
+    <!-- Scenario 1: Stockout -->
+    <div class="sc-card">
+      <div class="sc-hdr red">
+        <h4>Scenario 1 — Stockout Warning: SKU-003</h4>
+        <p>Steel Rods 10mm &nbsp;|&nbsp; Stock: 45 units &nbsp;|&nbsp; Daily usage: 30 &nbsp;|&nbsp; Days remaining: 1.5</p>
+      </div>
+      <div class="sc-body">
+        <div class="sc-lbl">BEFORE (Manual)</div>
+        <div class="fl">
+          <div class="fl-row">
+            <div class="fl-icon fi-m">1</div>
+            <div class="fl-text"><strong>Monday morning ERP check</strong> Jenny spots 45 units during her periodic scan. Production line shuts down Wednesday morning unless stock arrives in time.</div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-m">2</div>
+            <div class="fl-text"><strong>Emergency email to 3 suppliers</strong> Jenny contacts FastParts (2-day), BulkSupply (7-day), and QuickShip (1-day). <span class="tag-time tt-b">~30 min drafting</span></div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-m">3</div>
+            <div class="fl-text"><strong>Wait 24–48 hrs for replies</strong> With only 1.5 days of stock, even QuickShip's 1-day lead is dangerously close. Approval chain adds another day. <span class="tag-time tt-b">Production line at risk</span></div>
+          </div>
+        </div>
+        <div class="sc-lbl">AFTER (Betsy)</div>
+        <div class="fl">
+          <div class="fl-row">
+            <div class="fl-icon fi-a">1</div>
+            <div class="fl-text"><strong>Continuous monitor detects breach</strong> Betsy sees SKU-003 at 45 units vs reorder_point of 200. days_remaining = 45 ÷ 30 = 1.5. Alert fires immediately — no human needed. <span class="tag-time tt-a">&lt;1 min detection</span></div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-a">2</div>
+            <div class="fl-text"><strong>All 6 suppliers queried, QuickShip selected</strong> Only QuickShip Express (SUP-003) offers 1-day lead for SKU-003. Selected automatically by scoring. PO generated. <span class="tag-time tt-a">&lt;5 sec sourcing</span></div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-d">3</div>
+            <div class="fl-text"><strong>PO dispatched, Jenny notified</strong> PO sent immediately. Stock arrives next day — 0.5 days buffer before shutdown. Jenny receives dashboard update. <span class="tag-time tt-d">Expected supplier: QuickShip Express</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario 2: Duplicate Invoice -->
+    <div class="sc-card">
+      <div class="sc-hdr amber">
+        <h4>Scenario 2 — Duplicate Invoice: INV-2024-099</h4>
+        <p>Supplier: MidRange Supply (SUP-006) &nbsp;|&nbsp; Amount: $1,470 &nbsp;|&nbsp; SKU-004 ×10</p>
+      </div>
+      <div class="sc-body">
+        <div class="sc-lbl">BEFORE (Manual)</div>
+        <div class="fl">
+          <div class="fl-row">
+            <div class="fl-icon fi-m">1</div>
+            <div class="fl-text"><strong>Finance receives INV-2024-099</strong> Third $1,470 invoice from MidRange Supply for 10× Circuit Board Type A. Looks legitimate at first glance.</div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-m">2</div>
+            <div class="fl-text"><strong>Manual spreadsheet cross-check</strong> With 20+ invoices in the system, checking for duplicates manually takes 30–60 minutes and is error-prone. <span class="tag-time tt-b">30–60 min manual effort</span></div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-m">3</div>
+            <div class="fl-text"><strong>Duplicate likely paid</strong> INV-2024-089 and INV-2024-091 were already in the system undetected. INV-2024-099 likely processed and paid. <span class="tag-time tt-b">$1,470 at risk</span></div>
+          </div>
+        </div>
+        <div class="sc-lbl">AFTER (Betsy)</div>
+        <div class="fl">
+          <div class="fl-row">
+            <div class="fl-icon fi-a">1</div>
+            <div class="fl-text"><strong>Invoice submitted to /api/invoices</strong> _find_duplicates() runs automatically on every POST. No manual trigger required. Algorithm checks all invoice pairs.</div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-a">2</div>
+            <div class="fl-text"><strong>Match detected: same supplier, same amount, 29 days apart</strong> INV-2024-099 matches INV-2024-089: SUP-006, $1,470.00, 29-day gap → HIGH RISK (threshold: 30 days). <span class="tag-time tt-a">&lt;100ms detection</span></div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-d">3</div>
+            <div class="fl-text"><strong>Flagged before payment</strong> duplicate_flags array returned in API response. Invoice held for Jenny review. Payment blocked. <span class="tag-time tt-d">$1,470 protected</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario 3: Price Spike -->
+    <div class="sc-card">
+      <div class="sc-hdr blue">
+        <h4>Scenario 3 — Price Spike Escalation: SKU-003</h4>
+        <p>Best quote: $13.60 (ValueFirst) vs historical avg $11.40 (+19.3%)</p>
+      </div>
+      <div class="sc-body">
+        <div class="sc-lbl">BEFORE (Manual)</div>
+        <div class="fl">
+          <div class="fl-row">
+            <div class="fl-icon fi-m">1</div>
+            <div class="fl-text"><strong>All quotes arrive elevated</strong> FastParts: $20, BulkSupply: $15.70, QuickShip: $24, PrecisionParts: $17.90, ValueFirst: $13.60. All 60–110% above normal.</div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-m">2</div>
+            <div class="fl-text"><strong>No formal price baseline</strong> Jenny knows "it seems high" but has no threshold to enforce. Decision is instinct-based under production pressure. <span class="tag-time tt-b">No guardrail</span></div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-m">3</div>
+            <div class="fl-text"><strong>Risk of overpaying under pressure</strong> Jenny may accept ValueFirst's $13.60 (best available) without realising it is 19.3% above the historical avg of $11.40. <span class="tag-time tt-b">Budget overrun risk</span></div>
+          </div>
+        </div>
+        <div class="sc-lbl">AFTER (Betsy)</div>
+        <div class="fl">
+          <div class="fl-row">
+            <div class="fl-icon fi-a">1</div>
+            <div class="fl-text"><strong>Best quote vs stored historical avg compared</strong> historical_avg_price for SKU-003 = $11.40. Best current: $13.60 from ValueFirst (10-day lead). Deviation: +19.3%.</div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-h">2</div>
+            <div class="fl-text"><strong>Escalation triggered — human decision required</strong> Spike exceeds monitoring threshold. Jenny receives full context: all 5 quotes, historical avg, recommended action, reasoning. <span class="tag-time tt-a">Guardrail active</span></div>
+          </div>
+          <div class="fl-row">
+            <div class="fl-icon fi-d">3</div>
+            <div class="fl-text"><strong>Informed decision — not reactive</strong> Jenny can accept market price, delay reorder, or negotiate directly. Decision is data-driven, not made under blind pressure. <span class="tag-time tt-d">Expected action: flag_for_approval</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- =========================================================
+     TIME-MOTION ANALYSIS
+     ========================================================= -->
+<div class="section">
+  <div class="section-title">Weekly Time-Motion Analysis</div>
+  <div class="time-grid">
+    <div class="time-card">
+      <h4 class="h4-red">BEFORE — Jenny's Weekly Procurement Load</h4>
+      <div class="t-row"><span class="t-task">Inventory monitoring (manual ERP checks)</span><span class="t-val-r">4–5 hrs</span></div>
+      <div class="t-row"><span class="t-task">Supplier RFQ emails &amp; responses</span><span class="t-val-r">6–8 hrs</span></div>
+      <div class="t-row"><span class="t-task">Quote comparison &amp; supplier selection</span><span class="t-val-r">2–3 hrs</span></div>
+      <div class="t-row"><span class="t-task">PO drafting &amp; approval chasing</span><span class="t-val-r">4–5 hrs</span></div>
+      <div class="t-row"><span class="t-task">Delivery tracking &amp; supplier follow-up calls</span><span class="t-val-r">5–8 hrs</span></div>
+      <div class="t-row"><span class="t-task">Invoice matching &amp; discrepancy resolution</span><span class="t-val-r">3–4 hrs</span></div>
+      <div class="t-row"><span class="t-task">Monday morning reactive firefighting</span><span class="t-val-r">4–6 hrs</span></div>
+      <div class="t-total"><span>Total Weekly Procurement Load</span><span class="t-total-r">30–39 hrs</span></div>
+    </div>
+    <div class="time-card">
+      <h4 class="h4-green">AFTER — Jenny's Weekly Procurement Load (With Betsy)</h4>
+      <div class="t-row"><span class="t-task">Inventory monitoring</span><span class="t-val-n">0 hrs &nbsp;<span style="font-size:10px;">(Betsy)</span></span></div>
+      <div class="t-row"><span class="t-task">Supplier RFQ &amp; sourcing</span><span class="t-val-n">0 hrs &nbsp;<span style="font-size:10px;">(Betsy)</span></span></div>
+      <div class="t-row"><span class="t-task">Routine PO creation</span><span class="t-val-n">0 hrs &nbsp;<span style="font-size:10px;">(Betsy)</span></span></div>
+      <div class="t-row"><span class="t-task">High-value / anomaly PO review (1-click)</span><span class="t-val-g">0.5–1 hr</span></div>
+      <div class="t-row"><span class="t-task">Delivery tracking</span><span class="t-val-n">0 hrs &nbsp;<span style="font-size:10px;">(Betsy)</span></span></div>
+      <div class="t-row"><span class="t-task">Invoice exception review (flagged items only)</span><span class="t-val-g">0.5–1 hr</span></div>
+      <div class="t-row"><span class="t-task">Strategic dashboard &amp; supplier development</span><span class="t-val-g">1–2 hrs</span></div>
+      <div class="t-total"><span>Total Weekly Procurement Load</span><span class="t-total-g">2–4 hrs</span></div>
+    </div>
+  </div>
+  <div class="net-box">
+    <strong>Net time reclaimed: ~27–35 hours per week.</strong> Redirected to strategic supplier relationship management, contract negotiation, multi-site procurement strategy, and cross-functional projects — the work Jenny was hired for, not the operational firefighting she is currently trapped in. The agent does not replace Jenny's judgment; it reserves it for decisions that actually require it.
+  </div>
+</div>
+
+</div><!-- /page-body -->
+
+<footer class="page-footer">
+  Betsy Autonomous Procurement Agent — Business Process Impact Analysis &nbsp;|&nbsp;
+  Mock Environment: 12 SKUs · 6 Suppliers · 4 Scenario Simulations · FastAPI Mock Server &nbsp;|&nbsp;
+  Prepared: 28 May 2026
+</footer>
+
+</body>
+</html>

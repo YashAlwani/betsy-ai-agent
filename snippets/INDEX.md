@@ -1,0 +1,50 @@
+# Snippets index
+
+Rendered from `decision_logs/CODE-EVIDENCE-SNIPPETS.md`. Filename stem = the `@token`.
+
+- `token` — File — no line range (served route / runtime artifact)
+- ![inventory](./inventory.png) &nbsp; `@inventory` → mock_data/inventory.json
+- ![suppliers](./suppliers.png) &nbsp; `@suppliers` → mock_data/suppliers.json
+- ![scenarios](./scenarios.png) &nbsp; `@scenarios` → scenarios/stockout_warning.json
+- ![state--inject](./state--inject.png) &nbsp; `@state--inject` → server/state.py
+- ![state--reset-bug](./state--reset-bug.png) &nbsp; `@state--reset-bug` → server/state.py
+- ![state--boot-reload](./state--boot-reload.png) &nbsp; `@state--boot-reload` → server/state.py
+- ![pipeline-graph](./pipeline-graph.png) &nbsp; `@pipeline-graph` → pipeline/graph.py
+- ![decide--cap](./decide--cap.png) &nbsp; `@decide--cap` → pipeline/nodes/decide.py
+- ![decide--triggers](./decide--triggers.png) &nbsp; `@decide--triggers` → pipeline/nodes/decide.py
+- ![orchestra-graph](./orchestra-graph.png) &nbsp; `@orchestra-graph` → orchestra/graph.py
+- ![inventory_monitor](./inventory_monitor.png) &nbsp; `@inventory_monitor` → orchestra/agents/inventory_monitor.py
+- ![supplier_scout](./supplier_scout.png) &nbsp; `@supplier_scout` → orchestra/agents/supplier_scout.py
+- ![invoice_auditor](./invoice_auditor.png) &nbsp; `@invoice_auditor` → orchestra/agents/invoice_auditor.py
+- ![llm](./llm.png) &nbsp; `@llm` → shared/llm.py
+- ![api_client](./api_client.png) &nbsp; `@api_client` → shared/api_client.py
+- ![api_client--swallow](./api_client--swallow.png) &nbsp; `@api_client--swallow` → shared/api_client.py
+- ![pipeline-state](./pipeline-state.png) &nbsp; `@pipeline-state` → pipeline/state.py
+- ![orchestra-state](./orchestra-state.png) &nbsp; `@orchestra-state` → orchestra/state.py
+- ![wireframe](./wireframe.png) &nbsp; `@wireframe` → dashboard/wireframe.html
+- `betsy--separate-file` — dashboard/betsy.html — no line range (served route / runtime artifact)
+- ![betsy--promise-all](./betsy--promise-all.png) &nbsp; `@betsy--promise-all` → dashboard/betsy.html
+- ![betsy--narrative](./betsy--narrative.png) &nbsp; `@betsy--narrative` → dashboard/betsy.html
+- ![betsy--run-chips](./betsy--run-chips.png) &nbsp; `@betsy--run-chips` → dashboard/betsy.html
+- ![betsy--settings-panel](./betsy--settings-panel.png) &nbsp; `@betsy--settings-panel` → dashboard/betsy.html
+- `index--unchanged` — dashboard/index.html — no line range (served route / runtime artifact)
+- ![index--fetch](./index--fetch.png) &nbsp; `@index--fetch` → dashboard/index.html
+- ![main--run-agent](./main--run-agent.png) &nbsp; `@main--run-agent` → server/main.py
+- ![main--scheduler](./main--scheduler.png) &nbsp; `@main--scheduler` → server/main.py
+- ![approvals](./approvals.png) &nbsp; `@approvals` → server/routers/approvals.py
+- ![approvals--notify](./approvals--notify.png) &nbsp; `@approvals--notify` → server/routers/approvals.py
+- ![act](./act.png) &nbsp; `@act` → pipeline/nodes/act.py
+- ![db](./db.png) &nbsp; `@db` → server/db.py
+- ![orders--ema](./orders--ema.png) &nbsp; `@orders--ema` → server/routers/orders.py
+- ![orders--notify](./orders--notify.png) &nbsp; `@orders--notify` → server/routers/orders.py
+- ![scheduler_instance](./scheduler_instance.png) &nbsp; `@scheduler_instance` → server/scheduler_instance.py
+- ![stats](./stats.png) &nbsp; `@stats` → server/routers/stats.py
+- ![test_ema_learning](./test_ema_learning.png) &nbsp; `@test_ema_learning` → tests/test_ema_learning.py
+- ![test_long_term_learning](./test_long_term_learning.png) &nbsp; `@test_long_term_learning` → tests/test_long_term_learning.py
+- ![evaluate](./evaluate.png) &nbsp; `@evaluate` → pipeline/nodes/evaluate.py
+- ![suppliers-router](./suppliers-router.png) &nbsp; `@suppliers-router` → server/routers/suppliers.py
+- ![notifier](./notifier.png) &nbsp; `@notifier` → server/notifier.py
+- ![config](./config.png) &nbsp; `@config` → server/config.py
+- ![notifications-router](./notifications-router.png) &nbsp; `@notifications-router` → server/routers/notifications.py
+- ![test_notifier](./test_notifier.png) &nbsp; `@test_notifier` → tests/test_notifier.py
+- ![requirements](./requirements.png) &nbsp; `@requirements` → requirements.txt

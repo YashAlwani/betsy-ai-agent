@@ -1,0 +1,92 @@
+DL-01 — What Betsy Needs to Test Against: Building the Mock Environment
+Betsy Autonomous Procurement Agent
+
+
+0. Context
+
+Project: Betsy — Autonomous Procurement Agent / ICT Bachelor Research Project, Phase 1
+
+Why this matters right now:
+I had been describing Betsy as an autonomous procurement agent, but I could not yet picture what that meant as working software. I did not know what a stockout should look like as data, or what would make one invoice look more suspicious than another. Until those things were defined, there was nothing concrete for an agent to act on and nothing to test it against. So the first job was to make the problem real before trying to solve it.
+
+Where this fits:
+Phase 1 (Architecture and Research). The gap found at the end of this log is what makes DL-02 necessary.
+
+
+1. Research question
+
+What environment do I need in order to observe, test, and validate autonomous procurement decisions reliably?
+
+
+2. Current LO stage
+
+[x] Analyzing — surveyed procurement failure modes and identified the data each one needs
+[x] Advising — recommended building the test environment before writing any agent code
+[x] Designing — designed the SKU fields, the supplier trade-offs, and 4 injectable scenarios
+[x] Realizing — built the datasets, the REST server, the dashboard, and the scenario injection
+[x] Managing — confirmed all 4 scenarios are reproducible, resettable, and do not bleed together
+
+
+3. What makes a good decision here
+
+A good environment has to do three things. It has to cover all four procurement problems Betsy is meant to handle, because anything it cannot produce is something I cannot test. Its data has to be realistic enough to create genuine trade-offs, so the agent faces real choices rather than one obvious answer. And it has to reset cleanly between runs, so every test starts from the same baseline and results stay reproducible.
+
+
+4. What I decided
+
+Build the environment first and the agent second. That means the mock datasets, a REST server, four injectable test scenarios, and a live dashboard — all in place before writing a single line of agent logic.
+
+
+5. Why this decision
+
+Method: Lab, Workshop
+
+The inventory data @inventory holds the 12 SKUs, and each one carries a reorder point and an average daily usage. According to the case summary (@case_summary), preventing stockouts is the core problem, so those two numbers are required rather than optional: without them the agent can only see that stock is low, not how urgent it is. This led directly to the stockout calculation the agent relies on later — days remaining equals current stock divided by daily usage.
+
+The supplier data @suppliers gives each supplier a different price, lead time, and reliability score. According to the stakeholder analysis (@stakeholder_analysis), production needs speed while finance needs cost control, so the suppliers were deliberately built to pull in different directions — for example a fast but expensive option against a cheap but slow one. This led to supplier selection being a real decision with a defensible answer, instead of a list where any choice is as good as another.
+
+The scenario files @scenarios each describe one problem and the action the agent should take. According to the before-and-after picture in the GAP analysis (@bpm_analysis), the four situations worth modelling are a stockout, a price spike, a duplicate invoice, and a supplier being unavailable. Building each as its own file with an expected outcome led to a test suite where any agent run can be checked against a known answer.
+
+The scenario injection @state applies a scenario by copying the base state and patching only the relevant fields. According to the third requirement above (clean resets), this was needed so runs never contaminate each other. This led to a server I can re-test all day without restarting it, because every injection starts from the same clean baseline.
+
+[IMAGE: gap-as-is.png — The manual procurement process this environment is built to model: Jenny doing every step by hand, with the waits and hand-offs that Betsy is meant to remove.]
+
+[IMAGE: decision_logs/images/gap-dashboard-empty-log.png — The dashboard showing SKU-003 critically low while the agent log sits empty. The data is all there; nothing acts on it yet.]
+
+[IMAGE: decision_logs/images/gap-supplier-scoreboard.png — The supplier scoreboard. A person can see which supplier solves the shortage; nothing connects that answer to the problem.]
+
+GAP found:
+The environment now shows the whole problem clearly: SKU-003 is critically low and a capable supplier is available, but nothing links the two. There is no purchase order and no alert. It is a complete picture of a solvable problem with no response attached. Closing that gap is what DL-02 has to do.
+
+
+6. Does this hold up
+
+- Covers all four problems: yes — each is injectable and each carries an expected action for checking.
+- Real decisions, not trivial ones: yes — supplier trade-offs are genuine and the duplicate invoice is deliberately ambiguous.
+- Resets cleanly: yes — the base state is copied on every injection (@state).
+
+Assumptions I'm making:
+Six suppliers and twelve SKUs is enough variety for a school-scope project. Real procurement is noisier, but the four problems are the same.
+
+What surprised me:
+The four problems are not the same kind of task. Writing the expected outcome for each one made that obvious: a stockout is arithmetic, a price spike is a comparison, and a duplicate invoice is a judgement call. That difference is what later drove the architecture decision in DL-02.
+
+
+7. What this unlocks
+
+Next LO stage: Designing to Realizing (DL-02)
+
+What I can now do:
+Inject any of the four scenarios, watch the state change live in the dashboard, and check the agent's output against a known expected result — all without touching real data.
+
+Ongoing monitoring:
+This is also a monitoring tool, not just a test harness. In a real deployment you would run the same four scenarios against staging on a regular schedule and confirm the agent still produces the expected action. Same input, same expected outcome, is a simple regression check, and the dashboard is something a manager can open without reading any code.
+
+How I'll know this worked:
+When the agent in DL-02 logs a decision after the stockout run — trigger stockout, action generate purchase order, supplier QuickShip Express — that is the moment this gap closes.
+
+
+Files: @inventory, @suppliers, @scenarios, @state
+Diagrams: @gap-as-is, @gap-dashboard-empty-log, @gap-supplier-scoreboard
+Source: @bpm_analysis, @case_summary, @stakeholder_analysis
+LO stages: Analyzing, Advising, Designing, Realizing, Managing

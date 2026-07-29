@@ -1,0 +1,41 @@
+---
+title: Betsy — C4 Container view (who uses it, and the parts inside)
+---
+flowchart TB
+    jenny["Jenny<br/><i>Operations manager</i><br/>approves high-value or unusual orders"]
+    finance["Finance<br/><i>person</i><br/>reviews flagged invoices"]
+    suppliers["Suppliers<br/><i>external</i><br/>6 suppliers in the mock environment"]
+    ollama["Ollama — local AI<br/><i>external</i><br/>llama3.1:8b, reasoning + summaries"]
+
+    subgraph BETSY["Betsy &nbsp;[ software system ]"]
+        direction TB
+        betsyUI["Betsy dashboard<br/><i>betsy.html</i><br/>plain-English narrative + approval cards"]
+        devUI["Dev dashboard<br/><i>index.html</i><br/>raw inventory, suppliers, POs, log"]
+        api["Server<br/><i>Python / FastAPI</i><br/>the REST API everything reads &amp; writes through"]
+        db[("Database<br/><i>SQLite</i><br/>agent log + approval queue")]
+        scheduler["Scheduler<br/><i>APScheduler</i><br/>starts a run every 30 min"]
+        notifier["Notifier<br/><i>plyer + email</i><br/>desktop &amp; email alerts"]
+        pipeline["Pipeline agent<br/><i>LangGraph</i><br/>simple step-by-step run"]
+        orchestra["Orchestra agent<br/><i>LangGraph</i><br/>parallel multi-specialist run"]
+    end
+
+    jenny -->|reviews & approves| betsyUI
+    finance -->|checks invoices & log| devUI
+    betsyUI <-->|HTTP JSON| api
+    devUI <-->|HTTP JSON| api
+    api <-->|saves & loads| db
+    scheduler -->|starts a run| pipeline
+    pipeline -->|reads data, posts orders & log| api
+    orchestra -->|reads data, posts orders & log| api
+    pipeline -->|asks for reasoning| ollama
+    orchestra -->|asks for reasoning| ollama
+    api -->|key events| notifier
+    notifier -->|desktop & email| jenny
+    pipeline -.->|places orders with| suppliers
+
+    classDef person fill:#08427b,color:#ffffff,stroke:#073b6f;
+    classDef ext fill:#8a8a8a,color:#ffffff,stroke:#6b6b6b;
+    classDef container fill:#438dd5,color:#ffffff,stroke:#3a7cbf;
+    class jenny,finance person;
+    class suppliers,ollama ext;
+    class betsyUI,devUI,api,db,scheduler,notifier,pipeline,orchestra container;

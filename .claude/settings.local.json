@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude update *)",
+      "Bash(python decision_logs/snippet_shot.py \"pipeline/nodes/decide.py\" 115-119 \"decision_logs/images/decide-115-119.png\" \"The \\\\$5,000 financial safeguard \\(cannot be overridden\\)\")",
+      "Bash(python -c \"import reportlab; print\\('reportlab', reportlab.Version\\)\")",
+      "Bash(python -c \"import fitz; print\\('PyMuPDF', fitz.__doc__.split\\(chr\\(10\\)\\)[0]\\)\")",
+      "Bash(git add *)"
+    ]
+  }
+}

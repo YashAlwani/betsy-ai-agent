@@ -1,0 +1,26 @@
+---
+title: Betsy — Memory that survives a restart, and the automatic run (DL-06)
+---
+flowchart TB
+    sched["Scheduler<br/><i>APScheduler, background thread</i><br/>fires a run every 30 min"]
+    pipe["Pipeline run<br/><i>detect &rarr; decide &rarr; act</i>"]
+    state["In-memory state<br/><i>agent log + approval queue + supplier scores</i>"]
+    lock["Write lock<br/><i>one writer at a time</i>"]
+    db[("betsy.db<br/><i>SQLite</i><br/>agent_log + approvals")]
+    boot["Server start"]
+    delivered["A purchase order is marked delivered"]
+    ema["Score update<br/><i>0.2 &times; this delivery + 0.8 &times; old score</i>"]
+
+    sched -->|starts| pipe
+    pipe -->|new log entry / held approval| lock
+    state -->|approve or decline| lock
+    lock -->|append| db
+    boot -->|on start, read both tables| db
+    db -->|restore into| state
+    delivered --> ema
+    ema -->|updates the supplier score in| state
+
+    classDef store fill:#438dd5,color:#ffffff,stroke:#3a7cbf;
+    classDef act fill:#eaf2fb,color:#0f3460,stroke:#9cc3e6;
+    class db store;
+    class sched,pipe,state,lock,boot,delivered,ema act;

@@ -1,0 +1,139 @@
+====================================================================
+ BETSY — THE ORCHESTRA
+ The second way Betsy can run: several specialists at once
+====================================================================
+
+WHAT THIS IS
+------------
+The orchestra is Betsy's more advanced way of working. Instead of one
+checklist run top to bottom (that is the pipeline), three specialists look
+at the data at the same time, and a coordinator then pulls their findings
+together, settles any disagreements, and decides what to do.
+
+It is useful when more than one thing is wrong with the same item at once
+— for example a part is running low AND its latest invoice looks like a
+duplicate. The pipeline would handle those one after another; the
+orchestra looks at them together and applies a clear rule for which one
+wins.
+
+See the picture: diagrams/orchestra-overview.mmd
+
+
+THE FIVE STEPS, IN PLAIN WORDS
+------------------------------
+1. BUILD BRIEF — gather the data once.
+   Betsy pulls in stock, suppliers, purchase orders, and invoices a single
+   time, then hands the same snapshot to all three specialists. Because
+   they all read the same fixed copy, they can safely run at the same time
+   without tripping over each other.
+
+2. PARALLEL ANALYSIS — three specialists work at once.
+   The three specialists run together in parallel (see below). Each one
+   reports back what it found. If one of them fails or takes too long, the
+   others still finish and the run carries on with what is available.
+
+3. ORCHESTRATE — pull it together and decide.
+   The coordinator groups all the findings by item. If two findings clash
+   on the same item, it applies a fixed rule to decide which one wins (see
+   "How clashes are resolved"). It then turns each winning finding into a
+   firm decision.
+
+4. EXECUTE — carry out the approved decisions.
+   A single component, the PO Manager, places the orders that were
+   approved. It runs on its own, one at a time, so two orders can never be
+   written at once. Anything that needs a person is left in the approvals
+   queue instead.
+
+5. AUDIT — write it down.
+   The Decision Logger writes a record of the whole run. Like the pipeline,
+   this step always runs, so every run leaves a trail.
+
+
+THE THREE SPECIALISTS
+---------------------
+- Inventory Monitor looks at stock levels and flags items about to run out.
+- Supplier Scout looks at supplier prices and availability, and flags price
+  spikes or items no supplier can currently fill.
+- Invoice Auditor looks at the invoices and flags likely duplicates.
+
+Only one component ever writes anything back (the PO Manager, in the
+execute step). The three specialists only read, which is what makes it safe
+for them to run at the same time.
+
+
+HOW CLASHES ARE RESOLVED
+------------------------
+When two findings land on the same item, a short list of fixed rules
+decides which one wins, so the outcome is predictable:
+
+- Duplicate invoice + stockout -> the duplicate wins. Betsy will not place
+  an order on an item whose invoice is still in question.
+- Price spike + stockout -> the price spike wins. The order is sent to a
+  person rather than placed automatically.
+- Supplier unavailable + stockout -> the stockout wins. Betsy orders from
+  the next-best available supplier instead.
+- Anything not covered by a rule -> Betsy asks the AI, and if the AI is
+  unsure, the more severe finding wins.
+
+See the picture: diagrams/orchestra-conflict.mmd
+
+
+THE HUMAN CHECKPOINT
+--------------------
+This works exactly as it does in the pipeline. The orchestra does not stop
+and wait for a person mid-run. Decisions that need a human are placed in
+the approvals queue, and Jenny approves or rejects them later from her
+screen. The approve/reject actions live in the server.
+
+
+WHAT HAPPENS IF A STEP BREAKS
+-----------------------------
+Each step records any problem instead of crashing the run, and the audit
+step always runs at the end. If one of the three specialists fails, the
+other two still report and the run continues with what they found.
+
+
+THE MONEY SAFETY LIMIT
+----------------------
+The same single limit applies: any order above the set ceiling (5,000 by
+default) is sent to a person instead of being placed automatically.
+
+
+PIPELINE OR ORCHESTRA — WHEN EACH IS USED
+-----------------------------------------
+The pipeline is the simpler choice and is fine for everyday runs where
+problems are handled one at a time. The orchestra is the choice when
+several problems can hit the same item at once and the order they are
+handled in matters. Both read and write through the same server and respect
+the same money limit and the same approvals queue.
+
+
+WHY IT'S BUILT THIS WAY
+-----------------------
+The GAP analysis shows that real procurement problems do not arrive politely
+one at a time — a shortage, a price jump, and a questionable invoice can all
+involve the same part in the same week. The orchestra exists to handle that
+honestly: look at everything at once, then apply clear, written rules about
+which concern takes priority, so the result is both fast and defensible.
+
+See: docs/gap-analysis.txt  (and the styled version, bpm_analysis.html)
+
+
+WHERE THIS LIVES IN THE CODE
+----------------------------
+- orchestra/graph.py                  the five steps, the clash rules, the decisions
+- orchestra/state.py                  the shared snapshot passed between steps
+- orchestra/run.py                    how an orchestra run is started
+- orchestra/agents/inventory_monitor.py   the stockout specialist
+- orchestra/agents/supplier_scout.py      the price/availability specialist
+- orchestra/agents/invoice_auditor.py     the duplicate-invoice specialist
+- orchestra/agents/po_manager.py          the only part that places orders
+- orchestra/agents/decision_logger.py     writes the run record
+- server/routers/approvals.py         the approve/reject screen actions
+- shared/llm.py                       the AI connection (local Ollama, llama3.1:8b)
+
+
+DIAGRAMS FOR THIS DOCUMENT
+--------------------------
+- diagrams/orchestra-overview.mmd   the five steps, with the three specialists
+- diagrams/orchestra-conflict.mmd   how clashing findings are resolved

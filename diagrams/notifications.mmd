@@ -1,0 +1,28 @@
+---
+title: Betsy — When Betsy reaches Jenny, and how (DL-08)
+---
+flowchart TB
+    a["A decision is held for approval<br/><i>purchase order, duplicate flag,<br/>price spike, or escalation</i>"]
+    b["A supplier's score crosses<br/>below the warning line"]
+    c["An auto-approved order is placed<br/><i>off by default</i>"]
+    n["Notifier<br/><i>one place, server-side</i><br/>sending can never break a run"]
+    d["Desktop toast<br/><i>plyer — optional install</i>"]
+    e["Email<br/><i>built-in smtplib</i><br/>sent on a background thread"]
+    j(["Jenny — away from the dashboard"])
+
+    a --> n
+    b --> n
+    c --> n
+    n --> d
+    n --> e
+    d --> j
+    e --> j
+
+    classDef ev fill:#fff7ed,color:#7c2d12,stroke:#fb923c;
+    classDef hub fill:#438dd5,color:#ffffff,stroke:#3a7cbf;
+    classDef chan fill:#eaf2fb,color:#0f3460,stroke:#9cc3e6;
+    classDef person fill:#08427b,color:#ffffff,stroke:#073b6f;
+    class a,b,c ev;
+    class n hub;
+    class d,e chan;
+    class j person;

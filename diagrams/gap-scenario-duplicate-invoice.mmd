@@ -1,0 +1,15 @@
+---
+title: Scenario — Duplicate invoice (INV-2024-099, $1,470)
+---
+flowchart TB
+    subgraph BEF["BEFORE — manual"]
+        direction TB
+        b1["Finance receives a 3rd $1,470 invoice from the same supplier"] --> b2["Manual spreadsheet cross-check — 30–60 min, error-prone"]
+        b2 --> b3["Duplicate likely paid — $1,470 at risk"]
+    end
+    subgraph AFT["AFTER — Betsy"]
+        direction TB
+        a1["Invoice posted; duplicate scan runs automatically"] --> a2["Match: same supplier, same $1,470, 29 days apart = HIGH risk — under 100 ms"]
+        a2 --> a3["Flagged and held for review before any payment"]
+    end
+    BEF -.->|same situation| AFT

@@ -1,0 +1,20 @@
+flowchart TB
+    subgraph S1["1 · ingest"]
+        I1["GET inventory / suppliers / purchase-orders / invoices"]
+    end
+    subgraph S2["2 · detect (rules only)"]
+        D1["duplicates · price spikes · stockouts"]
+    end
+    subgraph S3["3 · evaluate (LLM)"]
+        E1["rank suppliers · assess duplicate risk · list spike context"]
+    end
+    subgraph S4["4 · decide (LLM + money safeguard)"]
+        DC1["pick action · force human if PO over MAX_AUTO_USD"]
+    end
+    subgraph S5["5 · act"]
+        A1["queue humans to /api/approvals · write or dry-run the PO"]
+    end
+    subgraph S6["6 · audit (LLM)"]
+        AU1["write plain-English run summary to /api/agent-log"]
+    end
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6

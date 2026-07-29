@@ -38,6 +38,73 @@ Scenario scripts (stockout, price spike, duplicate invoice, supplier outage) are
 
 ---
 
+## Architecture at a glance
+
+Who uses Betsy, and the parts inside it (a C4-style container view):
+
+```mermaid
+flowchart TB
+    jenny["Jenny<br/><i>Operations manager</i>"]
+    finance["Finance<br/><i>person</i>"]
+    ollama["Ollama — local AI<br/><i>llama3.1:8b</i>"]
+
+    subgraph WORLD["World &nbsp;[ simulated ERP, :8001 ]"]
+        direction TB
+        worldapi["World API<br/><i>FastAPI</i>"]
+        engine["Tick engine<br/><i>consumption · deliveries · invoices · events</i>"]
+        worlddb[("world.db<br/><i>SQLite</i>")]
+    end
+
+    subgraph BETSY["Betsy &nbsp;[ agent app, :8000 ]"]
+        direction TB
+        betsyUI["Betsy dashboard<br/><i>betsy.html</i>"]
+        devUI["Dev dashboard<br/><i>index.html</i>"]
+        api["Server<br/><i>FastAPI</i>"]
+        loop["Agent loop<br/><i>clock poll, APScheduler</i>"]
+        memory["Supplier memory<br/><i>learned EMA scores</i>"]
+        betsydb[("betsy.db<br/><i>SQLite</i>")]
+        notifier["Notifier<br/><i>plyer + email</i>"]
+        orchestra["Orchestra agent<br/><i>LangGraph, production</i>"]
+        pipeline["Pipeline agent<br/><i>LangGraph, comparison</i>"]
+    end
+
+    jenny --> betsyUI
+    finance --> devUI
+    betsyUI <--> api
+    devUI <--> api
+    api <-->|WorldClient adapter| worldapi
+    engine --> worlddb
+    worldapi <--> worlddb
+    loop --> memory
+    loop --> orchestra
+    memory <--> betsydb
+    api <--> betsydb
+    orchestra <-->|snapshot / POs| worldapi
+    pipeline <--> worldapi
+    orchestra --> ollama
+    pipeline --> ollama
+    api --> notifier
+    notifier --> jenny
+
+    classDef person fill:#08427b,color:#fff,stroke:#073b6f;
+    classDef ext fill:#8a8a8a,color:#fff,stroke:#6b6b6b;
+    classDef container fill:#438dd5,color:#fff,stroke:#3a7cbf;
+    classDef world fill:#2f855a,color:#fff,stroke:#276749;
+    class jenny,finance person;
+    class ollama ext;
+    class betsyUI,devUI,api,loop,memory,betsydb,notifier,pipeline,orchestra container;
+    class worldapi,engine,worlddb world;
+```
+
+Plain-English design docs (with diagrams) live in `docs/` and `pdf_exports/design/`:
+[gap-analysis](docs/gap-analysis.txt) (the before→after case for Betsy),
+[pipeline-architecture](docs/pipeline-architecture.txt),
+[orchestra-architecture](docs/orchestra-architecture.txt), and
+[api-control-layer](docs/api-control-layer.txt). All diagrams are in `diagrams/`
+(see [`diagrams/00-INDEX.txt`](diagrams/00-INDEX.txt)).
+
+---
+
 ## Setup
 
 **Prerequisites:** Python 3.11+, [Ollama](https://ollama.ai) running locally with `llama3.1:8b` pulled (optional — rule fallbacks cover everything offline).
@@ -85,7 +152,8 @@ betsy-ai-agent/
 ├── mock_data/               Seed data: 12 SKUs, 6 suppliers, POs, invoices
 ├── tests/                   Offline pytest suite + live evidence scripts
 ├── docs/                    Architecture docs (incl. WORLD_SIM_ARCHITECTURE.md)
-└── decision_logs/           Decision logs for every major build choice
+├── diagrams/                Design diagrams + wireframes (see diagrams/00-INDEX.txt)
+└── decision_logs/           8 decision logs documenting every major build choice
 ```
 
 ---
@@ -118,7 +186,7 @@ python tests/test_long_term_learning.py    # learned ranking flips after bad del
 
 ## Decision logs
 
-Decision logs in `decision_logs/` document every major choice made during the build — framework selection, architecture tradeoffs, UI design rationale, the HITL approval flow, persistence strategy, and the learning mechanism. Each log follows the DOT framework research format used in the ICT bachelor programme.
+Eight decision logs in `decision_logs/` document every major choice made during the build — framework selection, architecture tradeoffs, UI design rationale, the HITL approval flow, persistence strategy, the learning mechanism, and notifications. Each log follows the DOT framework research format used in the ICT bachelor programme.
 
 | Log | What it covers |
 |---|---|
@@ -129,6 +197,6 @@ Decision logs in `decision_logs/` document every major choice made during the bu
 | DL-05 | HITL approval queue end-to-end |
 | DL-06 | SQLite persistence, EMA learning, APScheduler |
 | DL-07 | Proving that score learning changes decisions |
-| DL-08 | Desktop + email push notifications |
+| DL-08 | Desktop + email notifications |
 
 The world/app split and simulation design are documented in [docs/WORLD_SIM_ARCHITECTURE.md](docs/WORLD_SIM_ARCHITECTURE.md).

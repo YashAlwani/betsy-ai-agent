@@ -1,0 +1,148 @@
+====================================================================
+ BETSY — DIAGRAM INDEX (what each picture shows)
+====================================================================
+
+This folder holds the diagrams used by Betsy's design documents.
+Each one is a Mermaid file (.mmd) — a small text file that describes a
+picture. To see the actual picture, open the .mmd file in any Mermaid
+viewer: paste it into https://mermaid.live, view it on GitHub, or open it
+in a code editor with a Mermaid preview.
+
+Every entry below says, in plain words, what the diagram shows, which
+document it belongs to, and where the matching code lives.
+
+--------------------------------------------------------------------
+ PIPELINE  (Betsy's simple, one-step-after-another agent)
+--------------------------------------------------------------------
+
+pipeline-overview.mmd
+  The six steps of one pipeline run, shown left to right:
+  ingest -> detect -> evaluate -> decide -> act -> audit. Also shows that
+  anything needing a person is parked in the approvals queue.
+  Document: docs/pipeline-architecture.txt
+  Code:     pipeline/graph.py
+
+pipeline-dataflow.mmd
+  The same six steps stacked top to bottom, with a one-line note on what
+  each step actually does to the data.
+  Document: docs/pipeline-architecture.txt
+  Code:     pipeline/nodes/ (ingest, detect, evaluate, decide, act, audit)
+
+pipeline-approval.mmd
+  How the human checkpoint works: the agent drops a ready-to-go purchase
+  order into the approvals queue, the run finishes, and Jenny approves or
+  rejects it later from her screen.
+  Document: docs/pipeline-architecture.txt
+  Code:     pipeline/nodes/act.py, server/routers/approvals.py
+
+--------------------------------------------------------------------
+ ORCHESTRA  (Betsy's advanced agent — several specialists at once)
+--------------------------------------------------------------------
+
+orchestra-overview.mmd
+  The five steps of an orchestra run, with the three specialists
+  (Inventory Monitor, Supplier Scout, Invoice Auditor) running together.
+  Document: docs/orchestra-architecture.txt · Code: orchestra/graph.py
+
+orchestra-conflict.mmd
+  How Betsy settles it when two findings clash on the same item — the
+  fixed precedence rules that decide which concern wins.
+  Document: docs/orchestra-architecture.txt · Code: orchestra/graph.py
+
+--------------------------------------------------------------------
+ WHOLE SYSTEM  (how all the parts fit together)
+--------------------------------------------------------------------
+
+system-c4-container.mmd
+  A C4-style container view: the people (Jenny, Finance), the outside
+  parties (Suppliers, the local AI), and every part inside Betsy
+  (dashboards, server, database, scheduler, notifier, both agents).
+  Document: README / system overview · Code: server/, orchestra/, pipeline/
+
+--------------------------------------------------------------------
+ GAP ANALYSIS  (how the work changes, before vs after Betsy)
+--------------------------------------------------------------------
+
+These come from the styled report bpm_analysis.html, redrawn as diagrams
+so they can be reused as images across the decision logs and the project.
+
+gap-as-is.mmd
+  BEFORE: the manual procurement process, drawn as swimlanes (Jenny,
+  Suppliers, Finance). Shows every hand-off, wait, and bottleneck.
+  Document: docs/gap-analysis.txt · Source: bpm_analysis.html
+
+gap-to-be.mmd
+  AFTER: the same process with Betsy doing the routine work and Jenny
+  stepping in only for high-value or unusual decisions.
+  Document: docs/gap-analysis.txt · Source: bpm_analysis.html
+
+gap-scenario-stockout.mmd
+  One concrete before/after: a near stockout on SKU-003 Steel Rods.
+  Document: docs/gap-analysis.txt · Code: scenarios/stockout_warning.json
+
+gap-scenario-duplicate-invoice.mmd
+  One concrete before/after: catching a duplicate $1,470 invoice.
+  Document: docs/gap-analysis.txt · Code: scenarios/duplicate_invoice.json
+
+gap-scenario-price-spike.mmd
+  One concrete before/after: escalating an unusual price jump.
+  Document: docs/gap-analysis.txt · Code: scenarios/price_spike.json
+
+--------------------------------------------------------------------
+ WIREFRAMES  (the two UI directions for Jenny's screen)
+--------------------------------------------------------------------
+
+These are authored in wiremd (text-first wireframes) under
+diagrams/wireframes/, rendered to PNG by build_wireframes.py.
+
+wireframe-betsy-standalone.png
+  VERSION 1: a standalone dashboard, four screens — Home (status cards +
+  recent activity), Pending approval, Agent log, and Supplier scoreboard.
+  The direction that was not chosen.
+  Document: docs/wireframes.md · Source: wireframes/betsy-standalone.wmd.md
+
+wireframe-betsy-layer.png
+  VERSION 2 (chosen): the enterprise AI layer — command bar, plain-English
+  summary, the inventory table, and the inline "Needs your OK" approval card.
+  Document: docs/wireframes.md · Source: wireframes/betsy-layer.wmd.md
+
+--------------------------------------------------------------------
+ DECISION-LOG DIAGRAMS  (drawn for a specific decision log)
+--------------------------------------------------------------------
+
+persistence-scheduler.mmd
+  How Betsy remembers across a restart and runs on its own: the scheduler
+  fires a run every 30 min, actions are written through one lock into the
+  SQLite file, the server reloads both tables on start-up, and a delivered
+  order updates the supplier's score.
+  Document: decision_logs/DL-06 · Code: server/db.py, server/scheduler_instance.py
+
+learning-crossover.mmd
+  Why a supplier's record changes what Betsy orders: the shortlist for
+  SKU-003 flips after 8 delivery rounds — QuickShip falls from 5 late
+  deliveries, FastParts rises from 3 on-time ones, and run 2 reorders them.
+  Document: decision_logs/DL-07 · Code: pipeline/nodes/evaluate.py
+
+notifications.mmd
+  How Betsy reaches Jenny when she is away from the dashboard: three kinds
+  of event (a held approval, a supplier score crossing the warning line, an
+  auto-approved order) reach one server-side notifier that sends a desktop
+  toast and an email — and can never break a run.
+  Document: decision_logs/DL-08 · Code: server/notifier.py, server/config.py
+
+decision-lifecycle.mmd
+  The whole life of one decision as a state machine: detected, evaluated,
+  decided, then either auto-approved or held for Jenny — and on through PO
+  created, in transit, delivered, and the supplier's score updated. Shows
+  the $5,000 limit as the hard gate that splits the two paths.
+  Document: decision_logs/DL-04, DL-05, DL-06, DL-07
+  Code:     pipeline/nodes/decide.py, pipeline/nodes/act.py,
+            server/routers/approvals.py, server/routers/orders.py
+
+--------------------------------------------------------------------
+ OTHER DESIGN DOCS
+--------------------------------------------------------------------
+
+Diagrams for the remaining design docs (the two-surface API control
+layer and the user requirements) are added here as those documents are
+rewritten in this same plain format.

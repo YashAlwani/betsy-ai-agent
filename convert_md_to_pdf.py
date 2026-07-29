@@ -78,19 +78,13 @@ MD_FILES = [
     "analysis/research_questions.md",
     "analysis/risk_assessment.md",
     "analysis/stakeholder_analysis.md",
-    "decision_logs/evidence/ORCHESTRA_ARCHITECTURE.md",
-    "decision_logs/evidence/PIPELINE_ARCHITECTURE.md",
     "docs/ORCHESTRA_ARCHITECTURE.md",
     "docs/PIPELINE_ARCHITECTURE.md",
     "docs/api-control-layer.md",
-    "docs/dl06-plan.md",
     "docs/test-report-dl05.md",
     "docs/test-report-dl06.md",
     "docs/user_requirements.md",
     "docs/wireframes.md",
-    "decision_logs/DL-SUMMARY.md",
-    "decision_logs/DOT_METHODS.md",
-    "decision_logs/COMMIT_TIMELINE.md",
 ]
 
 OUTPUT_ROOT = "pdf_exports"

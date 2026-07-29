@@ -1,0 +1,9 @@
+flowchart LR
+    T([Trigger]) --> I["1 · ingest"]
+    I --> D["2 · detect"]
+    D --> E["3 · evaluate (LLM)"]
+    E --> DC["4 · decide (LLM)"]
+    DC --> A["5 · act"]
+    A --> AU["6 · audit (LLM)"]
+    AU --> Z([done])
+    A -. "items needing a human" .-> Q[("/api/approvals queue")]

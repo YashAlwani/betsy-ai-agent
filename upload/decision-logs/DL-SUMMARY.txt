@@ -1,0 +1,86 @@
+Betsy — An AI Agent for Smarter Procurement
+GitHub: github.com/YashAlwani/betsy-ai-agent
+
+
+What is this?
+
+Betsy is an AI agent that handles purchasing decisions for a manufacturing company — automatically. It watches inventory levels, notices when things are going wrong (items running low, prices spiking, a supplier going offline, a duplicate invoice sneaking through), and acts on them without someone having to notice and respond by hand. For any decision above a set spending limit, it pauses and waits for a person to approve before going ahead.
+
+
+Why
+
+The project was built over five weeks as part of a bachelor ICT programme. The central question it tries to answer: can an AI reliably make purchasing decisions on its own, and if so, under what conditions? The payoff for the client is less manual procurement work, while a person stays in the loop for the high-value or ambiguous calls that genuinely need judgement.
+
+
+What was accomplished
+
+A complete, working system: a web backend, two web front ends (one for business users, one for developers), the agent itself in two architectures, a database so nothing is lost on a restart, a supplier scoring system that learns from past deliveries, and a scheduler that runs the agent every 30 minutes on its own. Every architectural decision is written up in its own decision log, and every part is explained in plain language — without reading any code — in the design documents and diagrams pointed to under each sprint below.
+
+----------------------------------------------------------------------
+
+Sprint 0 — Understanding the Problem
+
+Before any agent was built, the existing purchasing process was mapped as a visual before-and-after diagram — a BPM, the standard way of drawing how a business process flows step by step (@gap-as-is · @gap-to-be). That made the gap concrete and visible: SKU-003, a critical inventory item, was running out and nothing in the existing process was reacting to it. A test environment was set up at the same time — 12 products, 6 suppliers, and 4 failure scenarios that can be triggered on demand: stockout, price spike, duplicate invoice, and a supplier going offline (@gap-scenario-stockout · @gap-scenario-price-spike · @gap-scenario-duplicate-invoice).
+
+Designs & reports: @gap-analysis · @gap-as-is · @gap-to-be · @gap-scenario-stockout · @gap-scenario-price-spike · @gap-scenario-duplicate-invoice
+
+What it unlocked: a concrete, observable test bed before any agent code existed — the gap was visible, with a capable supplier sitting right next to an unmet need.
+
+
+Sprint 1 — Choosing the Architecture
+
+Two different agent structures were built and tested against each other. The Pipeline — a straight sequence of six steps: receive data, detect problems, evaluate options, decide, act, log — was clean and easy to trace (@pipeline-architecture · @pipeline-overview). The Orchestra — three workers running at the same time, coordinated by a fourth — handled situations where several problems happened at once, which the Pipeline could not (@orchestra-architecture · @orchestra-overview · @orchestra-conflict). Both were run against all four failure scenarios before a choice was made. A hard spending cap of $5,000 was written straight into the decision step as code, not as a prompt or a guideline, so it cannot be talked around.
+
+Designs & reports: @pipeline-architecture · @orchestra-architecture · @pipeline-overview · @orchestra-overview · @orchestra-conflict · @system-c4-container
+
+Decision logs: @[DL-01] (the gap analysis) · @[DL-02] (the architecture choice, with test evidence)
+
+What it unlocked: a working, testable agent backbone, with the financial safeguard enforced in code rather than left to the model.
+
+
+Sprint 2 — Making It Usable
+
+The agent worked from the terminal, but a terminal is not something a business user would trust or understand. A full web interface was designed and built — an AI command bar, auto-written summaries of what the agent decided and why, supplier scoring tables, and inline approval cards for escalated purchases (@wireframes · @wireframe-betsy-layer · @user_requirements). Every element the agent produced is clearly marked, so it is always obvious what came from the AI and what was already in the system. The underlying model was also switched from Mistral 7B to Llama 3.1 8B (both run locally) after testing showed Llama produced more consistently structured output. The first real run proved the safeguard worked straight away: an $11,937 purchase order was correctly blocked and escalated for human approval (@decision-lifecycle).
+
+Designs & reports: @wireframes · @wireframe-betsy-standalone · @wireframe-betsy-layer · @user_requirements · @api-control-layer · @decision-lifecycle
+
+Decision logs: @[DL-03] (the UI design rationale) · @[DL-04] (the model switch and the safeguard in practice)
+
+What it unlocked: a live system where the business page and the developer view update from the same API in real time.
+
+
+Sprint 3 — Persistence, Approvals, and Learning
+
+Three gaps were closed in one sprint. First, the approval queue: escalated decisions were being logged but could not actually be acted on, so a proper queue was built where confirming an approval executes the original purchase directly — and a bug that wiped the queue on every scenario run was found and fixed (@pipeline-approval · @decision-lifecycle). Second, persistence: before this sprint, restarting the system erased everything, so a lightweight file-based database (SQLite) was added with safe concurrent writes, verified by confirming that 7 log entries and 1 pending approval survived a full restart (@persistence-scheduler). Third, supplier learning: scores now update after every delivery using an EMA — an exponential moving average, which blends each new delivery with past performance so one bad result does not overreact the score. A supplier with a strong 0.97 record that delivers five days late drops to 0.88 in a single event. The agent also began running itself every 30 minutes, with no human trigger.
+
+Designs & reports: @pipeline-approval · @decision-lifecycle · @persistence-scheduler · @test-report-dl05 · @test-report-dl06
+
+Decision logs: @[DL-05] (the human-in-the-loop approval queue) · @[DL-06] (persistence, learning, and the scheduler)
+
+What it unlocked: a system that survives a restart, learns from history, and runs itself — confirmed by 11 of 11 and 9 of 9 passing tests (@test-report-dl05 · @test-report-dl06), with the score formula verified to four decimal places.
+
+
+Sprint 4 — Proving the Learning Changes Real Decisions
+
+The final question: does the supplier scoring actually change what gets recommended, or does it just update numbers in the background? A two-run integration test was built with a delivery schedule engineered to produce a clean reversal (@learning-crossover · @test-report-dl06). QuickShip Express received five late deliveries and its score dropped from 0.92 to 0.44; FastParts Co. received three on-time deliveries and rose from 0.95 to 0.97 (@decision-lifecycle). After the fifth round FastParts overtook QuickShip in the ranking, and the agent's second run recommended a different supplier than the first — so the learning demonstrably changes procurement outcomes, not just numbers.
+
+Designs & reports: @learning-crossover · @decision-lifecycle · @test-report-dl06
+
+Decision logs: @[DL-07] (the capstone log, connecting all the previous decisions)
+
+What it unlocked: evidence that the learning changes real procurement behaviour, not just the numbers behind it.
+
+
+Sprint 5 — Reaching the User Away From the Screen
+
+The agent loop was complete, but it still needed someone watching the page to know when they were needed. The last feature pushed Betsy's decisions out to the user: desktop pop-up notifications and email, both handled on the server so a failed notification can never break a run, with a settings panel on the page so no terminal is needed (@notifications).
+
+Designs & reports: @notifications
+
+Decision logs: @[DL-08] (notifying the user when Betsy needs approval or has acted on its own)
+
+What it unlocked: the full loop — Betsy decides, the user is notified, the user approves, the order is placed — now works without anyone watching a dashboard.
+
+----------------------------------------------------------------------
+
+Diagrams live in diagrams/, screenshots in decision_logs/images/. Each sprint's decision logs carry the full reasoning behind the summary above.
