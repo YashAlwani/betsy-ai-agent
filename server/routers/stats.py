@@ -1,17 +1,17 @@
 from fastapi import APIRouter
 
+from server import db
 from server.scheduler_instance import scheduler
-from server.state import state
+from shared import world_client
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 
 @router.get("")
 def get_stats():
-    log       = state.agent_log
-    approvals = state.approvals
+    log       = db.load_log_entries()
+    pending   = db.load_pending_approvals()
 
-    pending   = [a for a in approvals if a["status"] == "pending"]
     auto      = [e for e in log
                  if e.get("decision") not in ("human_approved", "human_rejected", "score_updated")
                  and not e.get("metadata", {}).get("requires_human")]
@@ -24,11 +24,14 @@ def get_stats():
     queue_value  = sum(a.get("po_total") or 0 for a in pending)
 
     last_run_entry = next(
-        (e for e in reversed(log) if e.get("trigger") == "pipeline_run"), None
+        (e for e in reversed(log) if e.get("trigger") in ("orchestra_run", "pipeline_run")), None
     )
 
-    job      = scheduler.get_job("betsy_auto_run") if scheduler.running else None
-    next_run = job.next_run_time.isoformat() if job and job.next_run_time else None
+    cursor = db.get_agent_cursor()
+    try:
+        sim_day = world_client.get_clock().get("day")
+    except Exception:
+        sim_day = None
 
     return {
         "decisions_total":   total,
@@ -39,6 +42,8 @@ def get_stats():
         "pending_approvals": len(pending),
         "queue_value_eur":   round(queue_value, 2),
         "last_run":          last_run_entry["timestamp"] if last_run_entry else None,
+        "last_run_day":      cursor["last_run_day"],
+        "sim_day":           sim_day,
         "scheduler_active":  scheduler.running,
-        "next_run":          next_run,
+        "next_run":          None,
     }

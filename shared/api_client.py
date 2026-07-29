@@ -1,8 +1,17 @@
+"""HTTP client used by the agents (orchestra / pipeline).
+
+World data (inventory, POs, invoices) comes straight from the world service.
+Suppliers come from Betsy's API, which merges in her learned reliability
+scores — the agents never see the world's hidden ground truth.
+Approvals and decision logs are Betsy application state on port 8000.
+"""
 import json
 import os
 from pathlib import Path
 
 import httpx
+
+from shared import world_client
 
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
 MOCK_DIR = Path(__file__).parent.parent / "mock_data"
@@ -26,36 +35,34 @@ def load_invoices() -> list:
     return json.loads((MOCK_DIR / "invoices.json").read_text())
 
 
-# ── Live API calls ────────────────────────────────────────────────────────────
+# ── World data ────────────────────────────────────────────────────────────────
 
 def get_inventory() -> list:
-    return httpx.get(f"{API_BASE}/api/inventory", timeout=5.0).json()
-
-
-def get_suppliers() -> list:
-    return httpx.get(f"{API_BASE}/api/suppliers", timeout=5.0).json()
+    return world_client.get_inventory()
 
 
 def get_purchase_orders() -> list:
-    return httpx.get(f"{API_BASE}/api/purchase-orders", timeout=5.0).json()
+    return world_client.get_purchase_orders()
 
 
 def get_invoices() -> list:
-    return httpx.get(f"{API_BASE}/api/invoices", timeout=5.0).json()
+    return world_client.get_invoices()
 
 
-def inject_scenario(name: str) -> dict:
-    r = httpx.post(f"{API_BASE}/api/scenario/{name}", timeout=5.0)
-    r.raise_for_status()
-    return r.json()
+def get_snapshot() -> dict:
+    return world_client.get_snapshot()
 
 
-def reset_scenario() -> None:
-    try:
-        httpx.post(f"{API_BASE}/api/scenario/reset", timeout=5.0)
-    except Exception:
-        pass
+def get_suppliers() -> list:
+    """Suppliers with Betsy's learned reliability_score merged in."""
+    return httpx.get(f"{API_BASE}/api/suppliers", timeout=5.0).json()
 
+
+def _post_purchase_order(payload: dict) -> dict:
+    return world_client.create_po(payload)
+
+
+# ── Betsy application state ───────────────────────────────────────────────────
 
 def log_decision(trigger: str, analysis: str, decision: str,
                  confidence: float, metadata: dict) -> dict:
@@ -72,12 +79,6 @@ def log_decision(trigger: str, analysis: str, decision: str,
         return {"logged": False}
 
 
-def _post_purchase_order(payload: dict) -> dict:
-    r = httpx.post(f"{API_BASE}/api/purchase-orders", json=payload, timeout=5.0)
-    r.raise_for_status()
-    return r.json()
-
-
 def queue_approval(item: dict) -> dict:
     try:
         r = httpx.post(f"{API_BASE}/api/approvals", json=item, timeout=5.0)
@@ -88,7 +89,7 @@ def queue_approval(item: dict) -> dict:
 
 def is_server_up() -> bool:
     try:
-        httpx.get(f"{API_BASE}/", timeout=2.0)
+        httpx.get(f"{API_BASE}/health", timeout=2.0)
         return True
     except Exception:
         return False

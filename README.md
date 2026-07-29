@@ -1,19 +1,27 @@
 # Betsy — Autonomous Procurement Agent
 
-Betsy is an AI agent that monitors inventory, detects procurement problems, and either acts on them autonomously or escalates them to a human for approval. Built as a school research project exploring what it takes to make an AI system that a non-technical operations manager can actually trust.
+Betsy is an AI agent that runs the procurement lifecycle of a small manufacturer autonomously: she watches inventory drain day by day, orders from the supplier she trusts most, tracks deliveries, audits incoming invoices, and learns from every outcome. Built as a school research project exploring what it takes to make an AI system that a non-technical operations manager can actually trust.
+
+The project is split into **two services**:
+
+- **The world** (`world/`, port 8001) — a standalone simulated ERP with its own database and a controllable clock. Each simulated day, stock is consumed, purchase orders progress toward delivery, suppliers issue invoices (sometimes wrong or duplicated), and prices drift. It knows each supplier's *true* reliability — but never tells anyone.
+- **Betsy** (`server/`, port 8000) — the agent application: a multi-agent LangGraph "orchestra", an approvals workflow, desktop/email notifications, and a persistent memory of what she has *learned* about each supplier by observing deliveries. She talks to the world only through an API adapter (`shared/world_client.py`), so pointing her at a real ERP means re-implementing one module.
+
+Full design rationale: [docs/WORLD_SIM_ARCHITECTURE.md](docs/WORLD_SIM_ARCHITECTURE.md).
 
 ---
 
-## What it does
+## The lifecycle Betsy runs
 
-Betsy runs a procurement pipeline every 30 minutes (or on demand) and handles four failure modes:
+As the world clock advances, Betsy's agent loop triggers automatically each sim day:
 
-- **Stockout risk** — stock below reorder point, agent generates a PO to the best-scoring supplier
-- **Price spike** — unit price significantly above historical average, flags for human review
-- **Duplicate invoice** — same supplier, same amount, same period — flags as potential fraud
-- **Supplier unavailable** — finds the next best alternative automatically
+1. **Observe** — new deliveries update her learned supplier reliability scores (EMA)
+2. **Detect** — three analyst agents run in parallel: inventory monitor, supplier scout, invoice auditor
+3. **Decide** — an orchestrator resolves conflicting findings with code-level precedence + LLM tiebreaks
+4. **Act** — small POs are placed autonomously; price spikes, duplicates, and anything above the $5,000 limit go to the human approval queue
+5. **Learn** — the next delivery outcome feeds back into step 1
 
-Any decision above the $5,000 autonomous spending limit is held in an approval queue for a human to approve or decline. Everything below it executes automatically and logs to the audit trail.
+Scenario scripts (stockout, price spike, duplicate invoice, supplier outage) are **events injected into the running simulation**, not state resets — Betsy has to notice them among everything else happening.
 
 ---
 
@@ -21,11 +29,11 @@ Any decision above the $5,000 autonomous spending limit is held in an approval q
 
 | Layer | Tech |
 |---|---|
-| Agent framework | LangGraph (Pipeline + Orchestra patterns) |
-| LLM | Ollama — llama3.1:8b (local) |
-| Backend | FastAPI + uvicorn |
-| Persistence | SQLite (built-in sqlite3) |
-| Scheduling | APScheduler BackgroundScheduler |
+| Agent framework | LangGraph (Orchestra multi-agent; Pipeline kept as comparison) |
+| LLM | Ollama — llama3.1:8b (local, rule-based fallbacks work offline) |
+| Backend | FastAPI + uvicorn (two apps) |
+| Persistence | SQLite — `world.db` (environment) + `betsy.db` (agent memory) |
+| Scheduling | asyncio tick loop (world) + APScheduler poll (Betsy) |
 | Frontend | Vanilla JS, no framework |
 
 ---
@@ -38,41 +46,54 @@ Who uses Betsy, and the parts inside it (a C4-style container view):
 flowchart TB
     jenny["Jenny<br/><i>Operations manager</i>"]
     finance["Finance<br/><i>person</i>"]
-    suppliers["Suppliers<br/><i>external</i>"]
     ollama["Ollama — local AI<br/><i>llama3.1:8b</i>"]
 
-    subgraph BETSY["Betsy &nbsp;[ software system ]"]
+    subgraph WORLD["World &nbsp;[ simulated ERP, :8001 ]"]
+        direction TB
+        worldapi["World API<br/><i>FastAPI</i>"]
+        engine["Tick engine<br/><i>consumption · deliveries · invoices · events</i>"]
+        worlddb[("world.db<br/><i>SQLite</i>")]
+    end
+
+    subgraph BETSY["Betsy &nbsp;[ agent app, :8000 ]"]
         direction TB
         betsyUI["Betsy dashboard<br/><i>betsy.html</i>"]
         devUI["Dev dashboard<br/><i>index.html</i>"]
         api["Server<br/><i>FastAPI</i>"]
-        db[("Database<br/><i>SQLite</i>")]
-        scheduler["Scheduler<br/><i>APScheduler</i>"]
+        loop["Agent loop<br/><i>clock poll, APScheduler</i>"]
+        memory["Supplier memory<br/><i>learned EMA scores</i>"]
+        betsydb[("betsy.db<br/><i>SQLite</i>")]
         notifier["Notifier<br/><i>plyer + email</i>"]
-        pipeline["Pipeline agent<br/><i>LangGraph</i>"]
-        orchestra["Orchestra agent<br/><i>LangGraph</i>"]
+        orchestra["Orchestra agent<br/><i>LangGraph, production</i>"]
+        pipeline["Pipeline agent<br/><i>LangGraph, comparison</i>"]
     end
 
     jenny --> betsyUI
     finance --> devUI
     betsyUI <--> api
     devUI <--> api
-    api <--> db
-    scheduler --> pipeline
-    pipeline --> api
-    orchestra --> api
-    pipeline --> ollama
+    api <-->|WorldClient adapter| worldapi
+    engine --> worlddb
+    worldapi <--> worlddb
+    loop --> memory
+    loop --> orchestra
+    memory <--> betsydb
+    api <--> betsydb
+    orchestra <-->|snapshot / POs| worldapi
+    pipeline <--> worldapi
     orchestra --> ollama
+    pipeline --> ollama
     api --> notifier
     notifier --> jenny
-    pipeline -.->|orders| suppliers
 
     classDef person fill:#08427b,color:#fff,stroke:#073b6f;
     classDef ext fill:#8a8a8a,color:#fff,stroke:#6b6b6b;
     classDef container fill:#438dd5,color:#fff,stroke:#3a7cbf;
+    classDef world fill:#2f855a,color:#fff,stroke:#276749;
     class jenny,finance person;
-    class suppliers,ollama ext;
-    class betsyUI,devUI,api,db,scheduler,notifier,pipeline,orchestra container;
+    class ollama ext;
+    class betsyUI,devUI,api,loop,memory,betsydb,notifier,pipeline,orchestra container;
+    class worldapi,engine,worlddb world;
 ```
 
 Plain-English design docs (with diagrams) live in `docs/` and `pdf_exports/design/`:
@@ -86,28 +107,21 @@ Plain-English design docs (with diagrams) live in `docs/` and `pdf_exports/desig
 
 ## Setup
 
-**Prerequisites:** Python 3.11+, [Ollama](https://ollama.ai) running locally with `llama3.1:8b` pulled.
+**Prerequisites:** Python 3.11+, [Ollama](https://ollama.ai) running locally with `llama3.1:8b` pulled (optional — rule fallbacks cover everything offline).
 
 ```bash
 # install dependencies
 pip install -r requirements.txt
 
-# pull the model (if not already done)
-ollama pull llama3.1:8b
+# start both services
+python run_all.py
 
-# start the server
-python run_server.py
+# ...or separately:
+python run_world.py     # simulated ERP on :8001
+python run_server.py    # Betsy on :8000
 ```
 
-Open **http://localhost:8000/betsy** for the agent UI (Jenny's view) or **http://localhost:8000** for the full dev dashboard.
-
-### Optional flags
-
-```bash
-python run_server.py --port 8080          # different port
-python run_server.py --interval 2         # auto-run every 2 minutes
-python run_server.py --no-reload          # disable hot reload
-```
+Open **http://localhost:8000/betsy**, press **▶ Play**, and watch the world run. **http://localhost:8000** is the raw dev dashboard; **http://localhost:8001/docs** is the world's API.
 
 ---
 
@@ -115,51 +129,58 @@ python run_server.py --no-reload          # disable hot reload
 
 ```
 betsy-ai-agent/
-├── server/                  FastAPI app, routers, SQLite persistence
-│   ├── main.py              App entry point, lifespan, scheduler setup
-│   ├── db.py                SQLite write-through layer
-│   ├── state.py             In-memory state, scenario injection
-│   ├── scheduler_instance.py  APScheduler singleton
-│   └── routers/             inventory, suppliers, orders, approvals, stats...
-├── pipeline/                LangGraph pipeline (sequential)
-│   ├── graph.py             6-node workflow definition
-│   └── nodes/               ingest → detect → evaluate → decide → act → audit
-├── orchestra/               LangGraph orchestra (parallel multi-agent)
+├── world/                   Simulated ERP (standalone FastAPI service)
+│   ├── engine.py            Tick engine: consumption, deliveries, invoices, events
+│   ├── db.py                world.db schema, seeding, serializers
+│   ├── runner.py            Background clock loop
+│   ├── scenarios/           Event scripts (stockout, price spike, duplicate, outage)
+│   └── routers/             inventory, suppliers, orders, invoices, clock, events, snapshot
+├── server/                  Betsy app (FastAPI service)
+│   ├── main.py              App entry, agent poll loop wiring
+│   ├── agent_loop.py        Clock-driven trigger: observe → run orchestra
+│   ├── memory.py            Learned supplier scores (EMA), persisted in betsy.db
+│   ├── db.py                betsy.db: agent log, approvals, supplier memory
+│   └── routers/             proxies to world + approvals, stats, sim controls, notifications
+├── shared/
+│   ├── world_client.py      The ERP adapter — the only door between Betsy and the world
+│   └── llm.py               Ollama client with safe JSON parsing + fallbacks
+├── orchestra/               Production agent: parallel multi-agent LangGraph
+├── pipeline/                Linear predecessor, kept as DL-04 comparison artifact
 ├── dashboard/
-│   ├── betsy.html           Agent UI — for the operations manager
-│   └── index.html           Dev dashboard — full data view
-├── mock_data/               12 SKUs, 6 suppliers, invoices, purchase orders
-├── scenarios/               4 injectable test scenarios
-├── tests/
-│   ├── test_ema_learning.py           EMA formula verification
-│   └── test_long_term_learning.py     Integration test — 2 LLM runs, 8 delivery rounds
-├── docs/                    Architecture docs, API spec, test reports
-├── decision_logs/           8 decision logs documenting every major build choice
-└── run_server.py            Startup script
+│   ├── betsy.html           Agent UI — sim clock, event feed, approvals, learned scores
+│   └── index.html           Dev dashboard — raw data view
+├── mock_data/               Seed data: 12 SKUs, 6 suppliers, POs, invoices
+├── tests/                   Offline pytest suite + live evidence scripts
+├── docs/                    Architecture docs (incl. WORLD_SIM_ARCHITECTURE.md)
+├── diagrams/                Design diagrams + wireframes (see diagrams/00-INDEX.txt)
+└── decision_logs/           8 decision logs documenting every major build choice
 ```
 
 ---
 
-## The two UIs
+## Learning: ground truth vs learned belief
 
-**betsy.html** — designed for a non-technical operations manager. Plain English narrative, confidence shown as dots not decimals, approval cards that explain *why* Betsy stopped before asking for a decision. No jargon.
-
-**index.html** — full dev view. Raw inventory table, supplier scoreboard with live EMA scores, agent log, purchase order history.
-
-Both surfaces read from the same API and update every 5 seconds.
-
----
-
-## Learning
-
-Betsy gets smarter from delivery history. Every time a PO is marked delivered, the supplier's reliability score updates via an exponential moving average:
+The world assigns each supplier a hidden `true_reliability` that only drives delivery-date jitter — it is never exposed through the API. Betsy starts every supplier at a neutral 0.8 and updates her own score from observed outcomes:
 
 ```
-new_score  = 0.2 × delivery_performance + 0.8 × old_score
 performance = max(0.0, 1.0 − lateness_days × 0.1)
+new_score   = 0.2 × performance + 0.8 × old_score
 ```
 
-A supplier who delivers 8 days late repeatedly drops from a 0.92 score to 0.44 over 5 deliveries. That changed score changes who Betsy orders from next time — demonstrated in `tests/test_long_term_learning.py`.
+Scores live in `betsy.db`, survive restarts, and directly change who she orders from — a supplier who keeps delivering late gets dropped for a slower-but-reliable one. `tests/test_long_term_learning.py` demonstrates the flip end-to-end.
+
+---
+
+## Running tests
+
+```bash
+# offline unit + e2e suite (no services, no LLM needed)
+pytest tests/test_world_engine.py tests/test_event_injection.py tests/test_ema_observer.py tests/test_e2e_sim.py tests/test_notifier.py
+
+# live evidence scripts (start both services first)
+python tests/test_ema_learning.py          # EMA math against a live delivery
+python tests/test_long_term_learning.py    # learned ranking flips after bad deliveries
+```
 
 ---
 
@@ -178,17 +199,4 @@ Eight decision logs in `decision_logs/` document every major choice made during 
 | DL-07 | Proving that score learning changes decisions |
 | DL-08 | Desktop + email notifications |
 
----
-
-## Running tests
-
-```bash
-# start the server first
-python run_server.py
-
-# EMA formula verification (fast)
-python tests/test_ema_learning.py
-
-# Long-term learning integration test (3-5 min, requires LLM)
-python tests/test_long_term_learning.py
-```
+The world/app split and simulation design are documented in [docs/WORLD_SIM_ARCHITECTURE.md](docs/WORLD_SIM_ARCHITECTURE.md).

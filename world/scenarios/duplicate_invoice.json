@@ -1,0 +1,8 @@
+{
+  "name": "duplicate_invoice",
+  "description": "SUP-006 re-issues its latest invoice — the auditor should flag the duplicate before it gets paid twice.",
+  "expected_agent_action": "flag_duplicate",
+  "events": [
+    {"day_offset": 0, "type": "duplicate_invoice", "payload": {"supplier_id": "SUP-006"}}
+  ]
+}

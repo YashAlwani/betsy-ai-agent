@@ -130,6 +130,79 @@
     gap: 20px;
   }
 
+  /* ── COMMAND CENTER LAYOUT ── */
+  .cmd-wrap {
+    max-width: 1380px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+  .layout {
+    max-width: 1380px;
+    margin: 0 auto;
+    padding: 20px 28px 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 20px;
+    align-items: start;
+  }
+  .col-main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+  }
+  .col-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: sticky;
+    top: 66px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+  }
+  .side-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .side-title {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .side-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .side-row:last-child { margin-bottom: 0; }
+  .day-display {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+  .day-date { font-size: 12px; color: var(--muted); }
+  .inject-chip {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 6px;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    .col-side { position: static; max-height: none; overflow-y: visible; }
+  }
+
   /* ── AI NARRATIVE ── */
   .narrative-card {
     background: var(--ai-bg);
@@ -702,15 +775,18 @@
 </header>
 
 <!-- COMMAND RESPONSE -->
-<div class="main" style="padding-bottom:0; gap:0;">
+<div class="cmd-wrap" style="padding-top:12px;">
   <div class="cmd-response" id="cmd-response">
     <div class="cmd-res-label">✦ Betsy</div>
     <div id="cmd-res-text"></div>
   </div>
 </div>
 
-<!-- MAIN CONTENT -->
-<div class="main">
+<!-- COMMAND CENTER -->
+<div class="layout">
+
+<!-- MAIN COLUMN -->
+<div class="col-main">
 
   <!-- AI NARRATIVE -->
   <div class="narrative-card">
@@ -744,78 +820,23 @@
     </div>
     <div class="stat-card">
       <div class="stat-value ai" id="stat-next-run">—</div>
-      <div class="stat-label">Next auto-run</div>
+      <div class="stat-label">Last agent run (sim day)</div>
     </div>
   </div>
 
-  <!-- QUICK ACTIONS -->
-  <div class="quick-row">
-    <span class="quick-label">Jump to</span>
-    <button class="quick-chip" onclick="scrollTo('inv-section')">📦 Inventory</button>
-    <button class="quick-chip" onclick="scrollTo('sup-section')">🏭 Suppliers</button>
-    <button class="quick-chip" onclick="scrollTo('approval-section')">✋ Approvals</button>
-    <button class="quick-chip" onclick="scrollTo('log-section')">📋 Decision log</button>
-    <button class="quick-chip" onclick="window.open('/', '_blank')">🔧 Environment</button>
-  </div>
-
-  <!-- RUN CONTROLS -->
-  <div class="run-bar">
-    <span class="run-label">Simulate</span>
-    <button class="scenario-chip reset-chip" id="chip-normal"       onclick="selectScenario('')">Normal</button>
-    <button class="scenario-chip"            id="chip-stockout"     onclick="selectScenario('stockout_warning')">📦 Stockout</button>
-    <button class="scenario-chip"            id="chip-price"        onclick="selectScenario('price_spike')">⚠️ Price spike</button>
-    <button class="scenario-chip"            id="chip-duplicate"    onclick="selectScenario('duplicate_invoice')">🔴 Duplicate invoice</button>
-    <button class="scenario-chip"            id="chip-oos"          onclick="selectScenario('supplier_oos')">🚫 Supplier OOS</button>
-    <span class="run-status" id="run-status"></span>
-    <button class="run-btn" id="run-btn" onclick="runAgent()">
-      <div class="spinner" id="spinner"></div>
-      <span id="run-btn-label">✦ Run Betsy</span>
-    </button>
-  </div>
-
-  <!-- NOTIFICATION SETTINGS -->
-  <div class="notif-panel" id="notif-panel">
-    <div class="notif-header" onclick="toggleNotifPanel()">
-      <span class="notif-title">
-        <span class="notif-status-dot off" id="notif-dot"></span>
-        Notifications
-      </span>
-      <span class="notif-toggle-icon" id="notif-chevron">▶</span>
+  <!-- APPROVALS -->
+  <div class="approval-section" id="approval-section">
+    <div class="section-header">
+      <div style="display:flex;align-items:center;">
+        <span class="section-title">Needs your OK</span>
+        <span class="approval-count-badge" id="approval-badge" style="display:none">0</span>
+      </div>
+      <span class="ai-col-note">✦ Betsy stopped here — these need a human call</span>
     </div>
-    <div class="notif-body" id="notif-body">
-      <div class="notif-grid">
-        <div class="notif-field">
-          <label>Email address</label>
-          <input type="email" id="notif-email" placeholder="jenny@company.com" />
-        </div>
-        <div class="notif-field">
-          <label>SMTP user (sender)</label>
-          <input type="email" id="notif-smtp-user" placeholder="betsy-alerts@gmail.com" />
-        </div>
-        <div class="notif-field">
-          <label>SMTP password / app password</label>
-          <input type="password" id="notif-smtp-pass" placeholder="••••••••••••••••" />
-        </div>
-        <div class="notif-field">
-          <label>SMTP host : port</label>
-          <input type="text" id="notif-smtp-host" placeholder="smtp.gmail.com:587" />
-        </div>
-      </div>
-
-      <div style="margin-bottom:10px;">
-        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Notify me when</span>
-      </div>
-      <div class="notif-toggles">
-        <span class="notif-toggle-chip on" data-key="approval"   onclick="toggleChip(this)">✋ Approval needed</span>
-        <span class="notif-toggle-chip on" data-key="duplicate"  onclick="toggleChip(this)">🔴 Duplicate invoice</span>
-        <span class="notif-toggle-chip on" data-key="score_drop" onclick="toggleChip(this)">⬇ Supplier score drops</span>
-        <span class="notif-toggle-chip"    data-key="auto_po"    onclick="toggleChip(this)">✓ Auto-approved PO</span>
-      </div>
-
-      <div class="notif-actions">
-        <button class="notif-save-btn" onclick="saveNotifSettings()">Save settings</button>
-        <button class="notif-test-btn" onclick="sendTestNotification()">Send test</button>
-        <span class="notif-hint" id="notif-hint"></span>
+    <div id="approval-list">
+      <div class="empty-approvals">
+        <div class="empty-icon">✅</div>
+        <div class="empty-msg">Nothing waiting for your approval right now.</div>
       </div>
     </div>
   </div>
@@ -868,23 +889,6 @@
     </div>
   </div>
 
-  <!-- APPROVALS -->
-  <div class="approval-section" id="approval-section">
-    <div class="section-header">
-      <div style="display:flex;align-items:center;">
-        <span class="section-title">Needs your OK</span>
-        <span class="approval-count-badge" id="approval-badge" style="display:none">0</span>
-      </div>
-      <span class="ai-col-note">✦ Betsy stopped here — these need a human call</span>
-    </div>
-    <div id="approval-list">
-      <div class="empty-approvals">
-        <div class="empty-icon">✅</div>
-        <div class="empty-msg">Nothing waiting for your approval right now.</div>
-      </div>
-    </div>
-  </div>
-
   <!-- DECISION LOG -->
   <div class="log-section" id="log-section">
     <div class="section-header">
@@ -895,11 +899,116 @@
       <button class="chip chip-ghost" style="font-size:11px;padding:4px 12px;" onclick="clearLog()">Clear</button>
     </div>
     <div class="log-list" id="log-list">
-      <div class="empty-log">No decisions yet — run a scenario to see Betsy's reasoning here.</div>
+      <div class="empty-log">No decisions yet — press ▶ Play and let Betsy work.</div>
     </div>
   </div>
 
-</div><!-- .main -->
+</div><!-- .col-main -->
+
+<!-- SIDEBAR -->
+<aside class="col-side">
+
+  <!-- WORLD CLOCK -->
+  <div class="side-panel">
+    <div class="side-title">World clock <a href="/" target="_blank" style="font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted);">dev view ↗</a></div>
+    <div class="side-row">
+      <div>
+        <div class="day-display" id="sim-day">Day —</div>
+        <div class="day-date" id="sim-date"></div>
+      </div>
+      <button class="scenario-chip" id="clock-toggle" onclick="toggleClock()" style="margin-left:auto;font-size:13px;padding:8px 16px;">▶ Play</button>
+    </div>
+    <div class="side-row">
+      <button class="scenario-chip" onclick="stepDays(1)">+1 day</button>
+      <button class="scenario-chip" onclick="stepDays(7)">+7 days</button>
+      <select class="scenario-chip" id="speed-select" onchange="setSpeed()" style="cursor:pointer;flex:1;">
+        <option value="20">🐢 20s / day</option>
+        <option value="10" selected>▶ 10s / day</option>
+        <option value="5">⏩ 5s / day</option>
+        <option value="2">🚀 2s / day</option>
+      </select>
+    </div>
+    <div class="run-status" id="clock-status"></div>
+  </div>
+
+  <!-- BETSY -->
+  <div class="side-panel">
+    <div class="side-title">Agent</div>
+    <button class="run-btn" id="run-btn" onclick="runAgent()" style="width:100%;justify-content:center;">
+      <div class="spinner" id="spinner"></div>
+      <span id="run-btn-label">✦ Run Betsy now</span>
+    </button>
+    <div class="run-status" id="run-status" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- INJECT EVENTS -->
+  <div class="side-panel">
+    <div class="side-title">Inject event</div>
+    <button class="scenario-chip inject-chip" onclick="injectScript('stockout_warning', this)">📦 Stockout</button>
+    <button class="scenario-chip inject-chip" onclick="injectScript('price_spike', this)">⚠️ Price spike</button>
+    <button class="scenario-chip inject-chip" onclick="injectScript('duplicate_invoice', this)">🔴 Duplicate invoice</button>
+    <button class="scenario-chip inject-chip" onclick="injectScript('supplier_oos', this)">🚫 Supplier outage</button>
+    <button class="scenario-chip inject-chip reset-chip" onclick="resetWorld()" style="margin-top:8px;">↺ Reset world</button>
+  </div>
+
+  <!-- WORLD ACTIVITY FEED -->
+  <div class="side-panel" style="padding-bottom:6px;">
+    <div class="side-title">World activity</div>
+    <div id="event-list" style="max-height:300px;overflow-y:auto;margin:0 -16px;">
+      <div class="empty-log">Press ▶ Play to start the world.</div>
+    </div>
+  </div>
+
+  <!-- NOTIFICATION SETTINGS -->
+  <div class="notif-panel" id="notif-panel">
+    <div class="notif-header" onclick="toggleNotifPanel()">
+      <span class="notif-title">
+        <span class="notif-status-dot off" id="notif-dot"></span>
+        Notifications
+      </span>
+      <span class="notif-toggle-icon" id="notif-chevron">▶</span>
+    </div>
+    <div class="notif-body" id="notif-body">
+      <div class="notif-grid" style="grid-template-columns:1fr;">
+        <div class="notif-field">
+          <label>Email address</label>
+          <input type="email" id="notif-email" placeholder="jenny@company.com" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP user (sender)</label>
+          <input type="email" id="notif-smtp-user" placeholder="betsy-alerts@gmail.com" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP password / app password</label>
+          <input type="password" id="notif-smtp-pass" placeholder="••••••••••••••••" />
+        </div>
+        <div class="notif-field">
+          <label>SMTP host : port</label>
+          <input type="text" id="notif-smtp-host" placeholder="smtp.gmail.com:587" />
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Notify me when</span>
+      </div>
+      <div class="notif-toggles">
+        <span class="notif-toggle-chip on" data-key="approval"   onclick="toggleChip(this)">✋ Approval needed</span>
+        <span class="notif-toggle-chip on" data-key="duplicate"  onclick="toggleChip(this)">🔴 Duplicate invoice</span>
+        <span class="notif-toggle-chip on" data-key="score_drop" onclick="toggleChip(this)">⬇ Score drops</span>
+        <span class="notif-toggle-chip"    data-key="auto_po"    onclick="toggleChip(this)">✓ Auto-approved PO</span>
+      </div>
+
+      <div class="notif-actions">
+        <button class="notif-save-btn" onclick="saveNotifSettings()">Save settings</button>
+        <button class="notif-test-btn" onclick="sendTestNotification()">Send test</button>
+        <span class="notif-hint" id="notif-hint"></span>
+      </div>
+    </div>
+  </div>
+
+</aside><!-- .col-side -->
+
+</div><!-- .layout -->
 
 <div class="toast" id="toast"></div>
 
@@ -1101,10 +1210,12 @@
           ? `<span style="color:var(--green)">✓ Available</span>`
           : `<span style="color:var(--red)">✗ Unavailable</span>`;
 
+      const observed = sup.deliveries_observed || 0;
       return `<tr>
         <td class="td-name">${sup.name}</td>
         <td>
           <span class="dots" style="color:var(--ai)">${dots(sup.reliability_score)}</span>
+          <span style="color:var(--muted);font-size:10px;margin-left:6px;">${observed ? `learned from ${observed} deliveries` : 'no deliveries observed yet'}</span>
         </td>
         <td>${speedChip(lead)}</td>
         <td>${skuCount} SKU${skuCount !== 1 ? 's' : ''}</td>
@@ -1235,19 +1346,68 @@
     }
   }
 
-  // ── Scenario + Run controls ───────────────────────────────────────────────────
-  let selectedScenario = '';
+  // ── Sim clock controls ────────────────────────────────────────────────────────
+  let clockRunning = false;
 
-  function selectScenario(name) {
-    selectedScenario = name;
-    document.querySelectorAll('.scenario-chip').forEach(c => c.classList.remove('selected'));
-    const chipId = name
-      ? `chip-${name.replace('_warning','').replace('_spike','').replace('_invoice','')}`
-      : 'chip-normal';
-    document.getElementById(chipId)?.classList.add('selected');
-    if (!name) document.getElementById('chip-normal').classList.add('selected');
+  function renderClock(clock) {
+    if (!clock) return;
+    clockRunning = clock.running;
+    document.getElementById('sim-day').textContent  = 'Day ' + clock.day;
+    document.getElementById('sim-date').textContent = clock.date || '';
+    const toggle = document.getElementById('clock-toggle');
+    toggle.textContent = clock.running ? '⏸ Pause' : '▶ Play';
+    toggle.classList.toggle('selected', clock.running);
+    const sel = document.getElementById('speed-select');
+    if (document.activeElement !== sel && clock.tick_seconds) sel.value = String(clock.tick_seconds);
   }
 
+  async function toggleClock() {
+    try {
+      const clock = await post(clockRunning ? '/api/sim/clock/pause' : '/api/sim/clock/play', {});
+      renderClock(clock);
+    } catch { toast('World service unreachable.'); }
+  }
+
+  async function stepDays(n) {
+    try {
+      if (clockRunning) await post('/api/sim/clock/pause', {});
+      document.getElementById('clock-status').textContent = `stepping ${n} day(s)...`;
+      const res = await post(`/api/sim/clock/step?days=${n}`, {});
+      renderClock(res.clock);
+      document.getElementById('clock-status').textContent = '';
+      await refresh();
+    } catch { toast('Step failed — is the world service running?'); }
+  }
+
+  async function setSpeed() {
+    const secs = document.getElementById('speed-select').value;
+    try { renderClock(await post(`/api/sim/clock/speed?tick_seconds=${secs}`, {})); }
+    catch { toast('World service unreachable.'); }
+  }
+
+  // ── Event injection ───────────────────────────────────────────────────────────
+  async function injectScript(name, chipEl) {
+    try {
+      const res = await post(`/api/sim/scripts/${name}`, {});
+      chipEl.classList.add('selected');
+      setTimeout(() => chipEl.classList.remove('selected'), 2000);
+      document.getElementById('run-status').textContent =
+        `${name} queued from day ${res.from_day}`;
+      toast(`Injected: ${res.description || name}`);
+    } catch { toast('Could not inject — is the world service running?'); }
+  }
+
+  async function resetWorld() {
+    if (!confirm('Reset the world to its seed state? Sim history will be lost.')) return;
+    try {
+      await post('/api/sim/reset', {});
+      lastEventId = 0;
+      toast('World reset to day 0.');
+      await refresh();
+    } catch { toast('Reset failed — is the world service running?'); }
+  }
+
+  // ── Manual agent run (the agent loop also runs automatically) ─────────────────
   async function runAgent() {
     const btn     = document.getElementById('run-btn');
     const label   = document.getElementById('run-btn-label');
@@ -1257,14 +1417,10 @@
     btn.disabled = true;
     spinner.classList.add('show');
     label.textContent = 'Running...';
-    status.textContent = selectedScenario ? `scenario: ${selectedScenario}` : 'checking everything';
+    status.textContent = 'orchestra analyzing the world';
 
     try {
-      const params = new URLSearchParams({ mode: 'pipeline' });
-      if (selectedScenario) params.set('scenario', selectedScenario);
-      await post(`/api/run-agent?${params}`, {});
-
-      // Poll for new log entry — agent runs async, give it time
+      await post('/api/run-agent?mode=orchestra', {});
       status.textContent = 'Agent running — updating in ~10s...';
       setTimeout(async () => {
         await refresh();
@@ -1286,8 +1442,53 @@
     }
   }
 
-  // init chip state
-  selectScenario('');
+  // ── World event feed ──────────────────────────────────────────────────────────
+  let lastEventId = 0;
+  const EVENT_ICONS = {
+    tick_summary: '🕐', price_change: '⚠️', stock_set: '📦', usage_spike: '📈',
+    supplier_outage: '🚫', duplicate_invoice: '🔴', invoice_error: '💶',
+  };
+
+  function describeEvent(ev) {
+    const p = ev.payload || {};
+    switch (ev.type) {
+      case 'tick_summary': {
+        const bits = [];
+        if (p.consumed_total) bits.push(`${p.consumed_total} units consumed`);
+        if ((p.delivered || []).length) bits.push(`${p.delivered.length} PO(s) delivered`);
+        if ((p.invoices || []).length) bits.push(`${p.invoices.length} invoice(s) received`);
+        if ((p.ambient || []).length) bits.push(p.ambient.join(', '));
+        return bits.length ? bits.join(' · ') : 'quiet day';
+      }
+      case 'price_change':      return `${p.supplier_id} reprices ${p.sku_id} to €${p.unit_price}`;
+      case 'stock_set':         return `${p.sku_id} stock set to ${p.current_stock}`;
+      case 'usage_spike':       return `${p.sku_id} usage ×${p.factor || 2}`;
+      case 'supplier_outage':   return `${p.supplier_id} goes offline` + (p.duration_days ? ` for ${p.duration_days}d` : '');
+      case 'duplicate_invoice': return `duplicate invoice from ${p.supplier_id || 'supplier'}`;
+      case 'invoice_error':     return `wrong-amount invoice against ${p.po_reference}`;
+      default:                  return ev.type;
+    }
+  }
+
+  function renderEvents(events) {
+    if (!events || !events.length) return;
+    const list = document.getElementById('event-list');
+    if (lastEventId === 0) list.innerHTML = '';
+    for (const ev of events) {
+      lastEventId = Math.max(lastEventId, ev.id);
+      if (ev.type === 'tick_summary' && describeEvent(ev) === 'quiet day') continue;
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:6px 12px;font-size:12px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:baseline;';
+      const injected = ev.source !== 'sim';
+      div.innerHTML =
+        `<span>${EVENT_ICONS[ev.type] || '•'}</span>` +
+        `<span style="color:var(--muted);min-width:52px;">Day ${ev.day}</span>` +
+        `<span${injected ? ' style="font-weight:700;"' : ''}>${describeEvent(ev)}</span>` +
+        (injected ? '<span style="color:var(--ai);font-size:10px;">injected</span>' : '');
+      list.prepend(div);
+    }
+    while (list.children.length > 60) list.removeChild(list.lastChild);
+  }
 
   // ── ⌘K Command bar ───────────────────────────────────────────────────────────
   const CANNED = {
@@ -1335,20 +1536,41 @@
     document.getElementById('stat-pending').textContent    = s.pending_approvals ?? '—';
     document.getElementById('stat-queue-value').textContent =
       s.queue_value_eur > 0 ? '€' + s.queue_value_eur.toLocaleString() : '€0';
-    document.getElementById('stat-next-run').textContent   =
-      s.next_run ? timeAgo(s.next_run) : (s.scheduler_active ? 'scheduled' : '—');
+    document.getElementById('stat-next-run').textContent =
+      s.sim_day != null
+        ? (s.last_run_day >= 0 ? `day ${s.last_run_day}` : '—')
+        : (s.scheduler_active ? 'scheduled' : '—');
+  }
+
+  function renderAgentStatus(a) {
+    const status = document.getElementById('run-status');
+    if (!a) return;
+    if (a.running) {
+      status.textContent = `✦ Betsy is thinking (day ${a.run_day ?? '…'})`;
+    } else if (status.textContent.startsWith('✦ Betsy is thinking')) {
+      status.textContent = `idle · runs every ${a.cadence_days} sim day(s)`;
+    } else if (!status.textContent) {
+      status.textContent = `idle · runs every ${a.cadence_days} sim day(s)`;
+    }
   }
 
   // ── Main refresh ──────────────────────────────────────────────────────────────
   async function refresh() {
     try {
-      const [inventory, suppliers, agentLog, approvals, statsData] = await Promise.all([
+      const [inventory, suppliers, agentLog, approvals, statsData, clock, events, agentStatus] = await Promise.all([
         get('/api/inventory'),
         get('/api/suppliers'),
         get('/api/agent-log'),
         get('/api/approvals').catch(() => []),
         get('/api/stats').catch(() => null),
+        get('/api/sim/clock').catch(() => null),
+        get(`/api/sim/events?since=${lastEventId}`).catch(() => []),
+        get('/api/agent-status').catch(() => null),
       ]);
+
+      renderClock(clock);
+      renderEvents(events);
+      renderAgentStatus(agentStatus);
 
       const narrative = buildNarrative(inventory, agentLog, approvals);
       document.getElementById('narrative-text').textContent = narrative;

@@ -1,17 +1,18 @@
 """
-Orchestra entry point.
+Orchestra entry point — Betsy's production agent.
 
 Usage:
-  python -m orchestra.run                              # full run, live API
+  python -m orchestra.run                              # full run against the live world
   python -m orchestra.run --agent inventory_monitor   # test one agent
   python -m orchestra.run --agent supplier_scout
   python -m orchestra.run --agent invoice_auditor
   python -m orchestra.run --agent po_manager
   python -m orchestra.run --agent decision_logger
-  python -m orchestra.run --scenario stockout_warning  # inject + full run
-  python -m orchestra.run --scenario price_spike
-  python -m orchestra.run --scenario duplicate_invoice
-  python -m orchestra.run --scenario supplier_oos
+
+Normally the agent loop in the Betsy server triggers runs automatically as
+the world clock advances. To create a situation to react to, inject a sim
+event script first, e.g.:
+  curl -X POST http://localhost:8000/api/sim/scripts/price_spike
 """
 import argparse
 import subprocess
@@ -33,11 +34,7 @@ AGENT_MODULES = {
 }
 
 
-def run_full(scenario: str | None = None) -> dict:
-    if scenario:
-        print(f"\nInjecting scenario: {scenario}")
-        api.inject_scenario(scenario)
-
+def run_full() -> dict:
     print("\n" + "=" * 60)
     print("ORCHESTRA -- Full run")
     print("=" * 60)
@@ -61,10 +58,6 @@ def run_full(scenario: str | None = None) -> dict:
     elapsed = time.time() - t0
 
     _print_results(final, elapsed)
-
-    if scenario:
-        api.reset_scenario()
-
     return final
 
 
@@ -73,6 +66,9 @@ def _print_results(state: dict, elapsed: float) -> None:
     print(f"Errors: {state.get('errors', []) or 'none'}")
 
     brief = state.get("brief", {})
+    clock = brief.get("clock", {})
+    if clock:
+        print(f"Sim day: {clock.get('day')} ({clock.get('date')})")
     print(f"\nData loaded: {len(brief.get('inventory', []))} SKUs, "
           f"{len(brief.get('invoices', []))} invoices, "
           f"{len(brief.get('suppliers', []))} suppliers")
@@ -123,15 +119,14 @@ def run_agent(agent: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Betsy Orchestra")
-    parser.add_argument("--agent",    help="Test a single agent in isolation")
-    parser.add_argument("--scenario", help="Inject a test scenario then run full orchestra")
+    parser.add_argument("--agent", help="Test a single agent in isolation")
     args = parser.parse_args()
 
     if args.agent:
         run_agent(args.agent)
     else:
         if not api.is_server_up():
-            print(f"ERROR: API not reachable at {api.API_BASE}")
-            print("Start with: uvicorn server.main:app --reload --port 8000")
+            print(f"ERROR: Betsy API not reachable at {api.API_BASE}")
+            print("Start with: python run_server.py  (and the world: python run_world.py)")
             sys.exit(1)
-        run_full(scenario=args.scenario)
+        run_full()

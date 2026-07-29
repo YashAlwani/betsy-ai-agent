@@ -184,14 +184,13 @@
 <aside id="sidebar">
   <div class="sidebar-heading">Betsy</div>
 
-  <div class="sidebar-heading">Active Scenario</div>
+  <div class="sidebar-heading">Sim Clock</div>
   <span id="scenario-badge">loading…</span>
 
   <hr>
 
-  <div class="sidebar-heading">Inject Scenario</div>
+  <div class="sidebar-heading">Inject Event Script</div>
   <select id="scenario-select">
-    <option value="reset">— Reset to Normal —</option>
     <option value="stockout_warning">Stockout Warning</option>
     <option value="price_spike">Price Spike</option>
     <option value="duplicate_invoice">Duplicate Invoice</option>
@@ -199,6 +198,11 @@
   </select>
   <button class="btn" onclick="injectScenario()">Inject</button>
   <div id="sidebar-msg"></div>
+
+  <hr>
+
+  <div class="sidebar-heading">World API</div>
+  <a href="http://localhost:8001/docs" target="_blank" style="font-size:12px;">localhost:8001/docs</a>
 
   <hr>
 
@@ -352,18 +356,16 @@
     if (btn) btn.classList.add('active');
   }
 
-  // ── Scenario injection ─────────────────────────────────────────────────────
+  // ── Event script injection (into the running sim) ─────────────────────────
   async function injectScenario() {
     const name = document.getElementById('scenario-select').value;
     const msg = document.getElementById('sidebar-msg');
     msg.style.color = 'var(--muted)';
     msg.textContent = 'Injecting…';
     try {
-      const result = await api(`/api/scenario/${name}`, 'POST');
+      const result = await api(`/api/sim/scripts/${name}`, 'POST');
       msg.style.color = 'var(--ok)';
-      msg.textContent = result.description
-        ? result.description.slice(0, 80) + (result.description.length > 80 ? '…' : '')
-        : result.message || 'Done';
+      msg.textContent = `${result.queued_events} event(s) queued from day ${result.from_day}`;
       await refresh();
     } catch (e) {
       msg.style.color = 'var(--critical)';
@@ -497,12 +499,12 @@
       <td>${po.requested_by || '—'}</td>
     </tr>`).join('');
 
-    const pending   = orders.filter(o => o.status === 'pending_approval');
+    const open = orders.filter(o => o.status === 'approved' || o.status === 'in_transit');
     const totalSpend = orders.reduce((s, o) => s + o.total_amount, 0);
-    const pendingVal = pending.reduce((s, o) => s + o.total_amount, 0);
+    const openVal = open.reduce((s, o) => s + o.total_amount, 0);
     document.getElementById('po-summary').textContent =
-      `Total spend: $${fmt(totalSpend)}   |   Pending approval: $${fmt(pendingVal)} (${pending.length} PO${pending.length !== 1 ? 's' : ''})`;
-    setMetric('m-pos', pending.length, pending.length > 0 ? 'warning' : 'ok');
+      `Total spend: $${fmt(totalSpend)}   |   Open: $${fmt(openVal)} (${open.length} PO${open.length !== 1 ? 's' : ''})`;
+    setMetric('m-pos', open.length, open.length > 0 ? 'warning' : 'ok');
   }
 
   // ── Render: Invoices ───────────────────────────────────────────────────────
@@ -568,12 +570,16 @@
     }).join('');
   }
 
-  // ── Scenario badge ─────────────────────────────────────────────────────────
-  function renderScenario(info) {
-    const badge  = document.getElementById('scenario-badge');
-    const active = info.active || 'normal';
-    badge.textContent = active;
-    badge.className   = active !== 'normal' ? 'active' : '';
+  // ── Sim clock badge ────────────────────────────────────────────────────────
+  function renderScenario(clock) {
+    const badge = document.getElementById('scenario-badge');
+    if (!clock || clock.day == null) {
+      badge.textContent = 'world offline';
+      badge.className = '';
+      return;
+    }
+    badge.textContent = `Day ${clock.day} ${clock.running ? '▶' : '⏸'}`;
+    badge.className = clock.running ? 'active' : '';
   }
 
   // ── Main refresh ───────────────────────────────────────────────────────────
@@ -587,7 +593,7 @@
           api('/api/invoices'),
           api('/api/invoices/duplicates'),
           api('/api/agent-log'),
-          api('/api/scenario'),
+          api('/api/sim/clock').catch(() => null),
         ]);
 
       renderInventory(inventory);

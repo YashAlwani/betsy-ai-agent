@@ -1,0 +1,9 @@
+{
+  "name": "stockout_warning",
+  "description": "SKU-003 Steel Rods drop critically low and usage doubles — Betsy must reorder before the line stops.",
+  "expected_agent_action": "generate_po",
+  "events": [
+    {"day_offset": 0, "type": "stock_set", "payload": {"sku_id": "SKU-003", "current_stock": 45}},
+    {"day_offset": 0, "type": "usage_spike", "payload": {"sku_id": "SKU-003", "factor": 1.5}}
+  ]
+}

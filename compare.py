@@ -1,12 +1,14 @@
 """
 Run both architectures against all 4 test scenarios and print a side-by-side report.
 
-Usage:
+Each scenario is injected as an event script into a freshly reset world, the
+clock is stepped once to apply it, and then each graph runs against the result.
+
+Usage (both services must be running):
   python compare.py
   python compare.py --scenario stockout_warning   # single scenario
 """
 import argparse
-import json
 import sys
 import time
 from pathlib import Path
@@ -14,8 +16,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from shared import api_client as api
+from shared import world_client
 from pipeline.graph import build as build_pipeline
 from orchestra.graph import build as build_orchestra
+
+
+def _setup_scenario(scenario: str) -> None:
+    world_client.reset_world()
+    world_client.pause()
+    world_client.inject_script(scenario)
+    world_client.step(1)  # apply the script's events
 
 SCENARIOS = ["stockout_warning", "price_spike", "duplicate_invoice", "supplier_oos"]
 
@@ -28,7 +38,7 @@ EXPECTED = {
 
 
 def run_pipeline_scenario(scenario: str) -> dict:
-    api.inject_scenario(scenario)
+    _setup_scenario(scenario)
     graph = build_pipeline()
     initial = {
         "inventory": [], "suppliers": [], "all_pos": [], "open_pos": [],
@@ -38,7 +48,7 @@ def run_pipeline_scenario(scenario: str) -> dict:
     t0    = time.time()
     state = graph.invoke(initial)
     elapsed = time.time() - t0
-    api.reset_scenario()
+    world_client.reset_world()
 
     decisions = state.get("decisions", [])
     action    = decisions[0]["action"] if decisions else "no_action"
@@ -53,7 +63,7 @@ def run_pipeline_scenario(scenario: str) -> dict:
 
 
 def run_orchestra_scenario(scenario: str) -> dict:
-    api.inject_scenario(scenario)
+    _setup_scenario(scenario)
     graph = build_orchestra()
     initial = {
         "brief": {}, "inventory_findings": [], "supplier_findings": [],
@@ -63,7 +73,7 @@ def run_orchestra_scenario(scenario: str) -> dict:
     t0    = time.time()
     state = graph.invoke(initial)
     elapsed = time.time() - t0
-    api.reset_scenario()
+    world_client.reset_world()
 
     decisions = state.get("decisions", [])
     action    = decisions[0]["action"] if decisions else "no_action"
@@ -178,9 +188,9 @@ if __name__ == "__main__":
     parser.add_argument("--scenario", help="Run a single scenario instead of all four")
     args = parser.parse_args()
 
-    if not api.is_server_up():
-        print(f"ERROR: API not reachable at {api.API_BASE}")
-        print("Start with: uvicorn server.main:app --reload --port 8000")
+    if not api.is_server_up() or not world_client.is_up():
+        print("ERROR: both services must be running.")
+        print("Start with: python run_world.py  and  python run_server.py")
         sys.exit(1)
 
     scenarios = [args.scenario] if args.scenario else SCENARIOS

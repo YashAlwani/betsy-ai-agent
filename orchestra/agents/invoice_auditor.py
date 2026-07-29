@@ -64,6 +64,7 @@ def run(brief: dict, llm=None) -> list:
             "data": {
                 "invoice_1": pair["invoice_1"],
                 "invoice_2": pair["invoice_2"],
+                "newer_invoice": pair.get("newer_invoice"),
                 "supplier_id": pair["supplier_id"],
                 "amount": pair["amount"],
                 "days_apart": pair["days_apart"],
@@ -78,6 +79,8 @@ def run(brief: dict, llm=None) -> list:
 
 
 def _find_duplicates(invoices: list) -> list:
+    # Disputed invoices are already handled — don't re-flag them every run.
+    invoices = [inv for inv in invoices if inv.get("status") != "disputed"]
     dupes = []
     seen  = set()
     for i, a in enumerate(invoices):
@@ -100,9 +103,11 @@ def _find_duplicates(invoices: list) -> list:
             if days > 60:
                 continue
             seen.add(key)
+            newer = a["invoice_id"] if d1 >= d2 else b["invoice_id"]
             dupes.append({
                 "invoice_1": a["invoice_id"],
                 "invoice_2": b["invoice_id"],
+                "newer_invoice": newer,
                 "supplier_id": a["supplier_id"],
                 "sku_id": a.get("sku_id"),
                 "amount": a["total_amount"],

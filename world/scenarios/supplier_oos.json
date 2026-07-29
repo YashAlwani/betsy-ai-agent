@@ -1,0 +1,9 @@
+{
+  "name": "supplier_oos",
+  "description": "PrecisionParts GmbH (SUP-004) goes down for a week while SKU-003 runs low — Betsy must fail over to the next best available supplier.",
+  "expected_agent_action": "generate_po",
+  "events": [
+    {"day_offset": 0, "type": "supplier_outage", "payload": {"supplier_id": "SUP-004", "duration_days": 7}},
+    {"day_offset": 0, "type": "stock_set", "payload": {"sku_id": "SKU-003", "current_stock": 120}}
+  ]
+}
