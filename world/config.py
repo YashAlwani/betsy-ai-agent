@@ -15,4 +15,4 @@ SIM_EPOCH = date(2026, 1, 1)
 HISTORY_GAP_DAYS = 14
 
 WORLD_SEED = int(os.getenv("WORLD_SEED", "42"))
-DEFAULT_TICK_SECONDS = float(os.getenv("TICK_SECONDS", "5.0"))
+DEFAULT_TICK_SECONDS = float(os.getenv("TICK_SECONDS", "10.0"))

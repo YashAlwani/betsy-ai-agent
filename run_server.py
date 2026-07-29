@@ -13,27 +13,32 @@ API docs:   http://localhost:8000/docs
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import uvicorn
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from shared.preflight import run_betsy_checks
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Start the Betsy mock server")
+    parser = argparse.ArgumentParser(description="Start the Betsy server")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--no-reload", action="store_true")
-    parser.add_argument("--interval", type=int, default=30,
-                        help="Agent auto-run interval in minutes (default: 30)")
+    parser.add_argument("--run-every-days", type=int, default=1,
+                        help="Agent runs every N sim days (default: 1)")
     args = parser.parse_args()
 
-    os.environ.setdefault("AGENT_INTERVAL_MINUTES", str(args.interval))
+    os.environ.setdefault("AGENT_RUN_EVERY_DAYS", str(args.run_every_days))
 
     print(f"\nBetsy server starting on http://localhost:{args.port}")
-    print(f"  Dashboard : http://localhost:{args.port}")
     print(f"  Betsy UI  : http://localhost:{args.port}/betsy")
+    print(f"  Dev view  : http://localhost:{args.port}")
     print(f"  API docs  : http://localhost:{args.port}/docs")
-    print(f"  Auto-run  : every {args.interval} min  (set --interval to change)")
+    print(f"  Agent     : runs every {args.run_every_days} sim day(s)")
     print(f"  Reload    : {'off' if args.no_reload else 'on'}")
-    print()
+    run_betsy_checks()
 
     uvicorn.run(
         "server.main:app",

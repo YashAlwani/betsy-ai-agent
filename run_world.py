@@ -9,8 +9,14 @@ Usage:
 API docs: http://localhost:8001/docs
 """
 import argparse
+import sys
+from pathlib import Path
 
 import uvicorn
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from shared.preflight import run_world_checks
 
 
 def main():
@@ -21,7 +27,7 @@ def main():
 
     print(f"\nWorld service starting on http://localhost:{args.port}")
     print(f"  API docs : http://localhost:{args.port}/docs")
-    print()
+    run_world_checks()
 
     uvicorn.run(
         "world.main:app",

@@ -18,14 +18,15 @@ def client(tmp_path, monkeypatch):
 
 
 def test_inject_event_applies_on_next_tick(client):
+    # SKU-005 has no open seeded PO, so no delivery can top it back up mid-test
     r = client.post("/api/events", json={
         "type": "stock_set",
-        "payload": {"sku_id": "SKU-003", "current_stock": 45},
+        "payload": {"sku_id": "SKU-005", "current_stock": 45},
     })
     assert r.status_code == 201
 
     client.post("/api/clock/step", params={"days": 1})
-    sku = client.get("/api/inventory/SKU-003").json()
+    sku = client.get("/api/inventory/SKU-005").json()
     # stock_set applies before consumption that day, so stock is 45 minus one day's usage
     assert sku["current_stock"] <= 45
 
